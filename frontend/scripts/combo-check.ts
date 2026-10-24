@@ -15,12 +15,14 @@ function run(name: string, events: NoteEvent[], magicFull: boolean, expect: stri
 }
 
 run("E A = slash", [note("E", 0), note("A", 300)], false, ["luteStrike", "wolfBane"]);
-run("E G A = fireball", [note("E", 0), note("G", 300), note("A", 600)], false, ["luteStrike", "luteStrike", "dragonsBreath"]);
+run("E G = fireball", [note("E", 0), note("G", 300)], false, ["luteStrike", "dragonsBreath"]);
+run("E G A = fireball, then a jab", [note("E", 0), note("G", 300), note("A", 600)], false, ["luteStrike", "dragonsBreath", "luteStrike"]);
+run("E A still = slash", [note("E", 0), note("A", 300)], false, ["luteStrike", "wolfBane"]);
 run("A B D E = uppercut", [note("A", 0), note("B", 300), note("D", 600), note("E", 900)], false, ["luteStrike", "luteStrike", "luteStrike", "beanstalk"]);
 run("E G A B D E, no magic = fireball then uppercut", [0, 1, 2, 3, 4, 5].map((i) => note("EGABDE"[i], i * 300)), false,
-  ["luteStrike", "luteStrike", "dragonsBreath", "luteStrike", "luteStrike", "beanstalk"]);
+  ["luteStrike", "dragonsBreath", "luteStrike", "luteStrike", "luteStrike", "beanstalk"]);
 run("E G A B D E, full magic = super", [0, 1, 2, 3, 4, 5].map((i) => note("EGABDE"[i], i * 300)), true,
-  ["luteStrike", "luteStrike", "dragonsBreath", "luteStrike", "luteStrike", "happilyEverAfter"]);
+  ["luteStrike", "dragonsBreath", "luteStrike", "luteStrike", "luteStrike", "happilyEverAfter"]);
 run("gap > 700 ms breaks the combo", [note("E", 0), note("A", 900)], false, ["luteStrike", "luteStrike"]);
 run("wrong note resets, then combo still works", [note("E", 0), note("C", 200), note("E", 400), note("A", 600)], false,
   ["luteStrike", "luteStrike", "luteStrike", "wolfBane"]);

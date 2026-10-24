@@ -20,7 +20,7 @@ Two parts in one repo:
 |---|---|---|
 | Lute Strike | any note | quick jab (fires instantly; cancels into a special if your next notes complete one) |
 | Wolf-Bane Slash | E → A | forward slash, knockback |
-| Dragon's Breath | E → G → A | fireball |
+| Dragon's Breath | E → G | fireball |
 | Beanstalk Rise | A → B → D → E | launching uppercut |
 | Glass Slipper Guard | Em chord | shield while the chord rings (~1.5 s) |
 | Godmother's Grace | G → C → D chords | heal 20% |
@@ -46,8 +46,8 @@ Measured with a synthetic guitar through the real pipeline (`/input-test` → *R
 |---|---|---|
 | single notes | 10/10 | ~50 ms |
 | Em chord | 10/10 | ~85 ms |
-| E → G → A | 29/30 notes (9/10 runs) | ~50 ms |
-| G → C → D chords | 8/9 | ~80 ms |
+| E → G (fireball) | 20/20 notes (10/10 runs) | ~50 ms |
+| G → C → D chords | 7–9 of 9 | ~80 ms |
 
 A real guitar still needs checking: run `/input-test` with yours. The thresholds live at the top of `detector.ts`.
 

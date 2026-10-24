@@ -8,7 +8,7 @@
  *    with no gap longer than `maxGapMs`. The longest match wins.
  *  - Wrong notes just drop the start of the buffer; nothing is punished.
  *  - The buffer survives a completed special while a longer special could
- *    still follow (E G A = fireball, keep going B D E = super).
+ *    still follow (E G = fireball, keep going A B D E = super).
  */
 
 import type { ChordName, NoteEvent, PitchClass } from "@/lib/input/types";
@@ -111,7 +111,7 @@ export const MOVES: MoveDef[] = [
     id: "dragonsBreath",
     name: "Dragon's Breath",
     kind: "projectile",
-    inputs: [n("E"), n("G"), n("A")],
+    inputs: [n("E"), n("G")],
     description: "A fireball that flies across the screen and burns everything in its path.",
     damage: 26,
     range: 0,
@@ -121,7 +121,7 @@ export const MOVES: MoveDef[] = [
     shake: 0.008,
     magicGain: 7,
     color: 0xff8a3d,
-    fingering: [OPEN.E, OPEN.G, OPEN.A],
+    fingering: [OPEN.E, OPEN.G],
   },
   {
     id: "beanstalk",

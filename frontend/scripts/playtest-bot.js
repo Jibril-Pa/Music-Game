@@ -88,7 +88,7 @@
       if (Math.abs(dx) < 300 && now - bot.lastNoteAt > 230) {
         if (!bot.queue.length) {
           bot.seq++;
-          bot.queue = h.magic >= 100 ? ["E", "G", "A", "B", "D", "E"] : bot.seq % 3 === 0 ? ["E", "G", "A"] : ["E", "A"];
+          bot.queue = h.magic >= 100 ? ["E", "G", "A", "B", "D", "E"] : bot.seq % 3 === 0 ? ["E", "G"] : ["E", "A"];
         }
         press(NOTE_KEY[bot.queue.shift()]);
         bot.lastNoteAt = now;

@@ -23,7 +23,7 @@ const SHAPES: Record<string, number[]> = {
 };
 const NOTE_MIDI: Record<string, number[]> = { E: [40, 52, 64], G: [43, 55, 67], A: [45, 57, 69], B: [47, 59, 71], D: [50, 62, 74] };
 
-export const SELF_TEST_GROUPS = ["Single notes", "Em chord (shield)", "E → G → A (fireball)", "G → C → D chords"] as const;
+export const SELF_TEST_GROUPS = ["Single notes", "Em chord (shield)", "E → G (fireball)", "G → C → D chords"] as const;
 
 export function buildSelfTest(sampleRate: number): { samples: Float32Array<ArrayBuffer>; items: TestItem[]; seconds: number } {
   const items: { item: TestItem; midis: number[]; strumMs: number; amp: number }[] = [];
@@ -43,9 +43,8 @@ export function buildSelfTest(sampleRate: number): { samples: Float32Array<Array
   t += 0.4;
   for (let i = 0; i < 10; i++) {
     const oct = i % 2;
-    add("E → G → A (fireball)", "note", "E", [NOTE_MIDI.E[oct + 1]], 0.3);
-    add("E → G → A (fireball)", "note", "G", [NOTE_MIDI.G[oct]], 0.3);
-    add("E → G → A (fireball)", "note", "A", [NOTE_MIDI.A[oct]], 0.8);
+    add("E → G (fireball)", "note", "E", [NOTE_MIDI.E[oct + 1]], 0.3);
+    add("E → G (fireball)", "note", "G", [NOTE_MIDI.G[oct]], 0.8);
   }
   t += 0.4;
   for (let i = 0; i < 3; i++) {

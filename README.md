@@ -1,0 +1,234 @@
+# guitar-scroller
+
+Two parts in one repo:
+
+1. **The game** (`/play`): *The Bard of the Enchanted Forest*, a fairy-tale side-scrolling fighting game you play with a real guitar. Single notes attack, note sequences cast combos, and the Big Bad Wolf boss fights to a song from the pipeline.
+2. **The song pipeline** (`/preview`, `backend/`): MP3 → note chart + tab/sheet music + backing track (details further down).
+
+## The game
+
+```bash
+./dev.sh        # then open http://localhost:3000/play
+```
+
+- **Move:** `A`/`D` or `←`/`→`. **Jump:** `Space`. **Pause / Spellbook:** `Esc`. **Dev overlay** (fps + mic latency): `` ` ``.
+- **Attack only with notes:** play a guitar into the mic (*Play with my guitar*), or use the always-on keyboard fallback: `Z X C V B` = E G A B D, `1 2 3 4` = Em G C D chords.
+- Flow: Title → Tune ("tune your lute", mic only) → Level 1 (Enchanted Forest: wolves, goblins, the troll under the bridge, the gingerbread witch) → Big Bad Wolf → Victory/Defeat.
+- Wear **headphones** with the mic so the game music doesn't leak into it.
+
+| Move | Play | Effect |
+|---|---|---|
+| Lute Strike | any note | quick jab (fires instantly; cancels into a special if your next notes complete one) |
+| Wolf-Bane Slash | E → A | forward slash, knockback |
+| Dragon's Breath | E → G → A | fireball |
+| Beanstalk Rise | A → B → D → E | launching uppercut |
+| Glass Slipper Guard | Em chord | shield while the chord rings (~1.5 s) |
+| Godmother's Grace | G → C → D chords | heal 20% |
+| Happily Ever After | E G A B D E with full magic | screen-clearing super with a cinematic |
+
+Notes must come within 700 ms of each other (1.2 s in practice mode). Octave doesn't matter. Notes within ±80 ms of the beat are **Perfect** (×1.5 damage, more magic); Good is ±160 ms; Off is never punished. Every move is in the in-game **Spellbook**, with fretboard diagrams (open strings are enough for everything).
+
+**Boss:** pick a processed song (any finished job from the pipeline) or the built-in demo. In *parry* phases, the easy-chart notes become note orbs that appear above the wolf and fly at you. Play that note within ±150 ms of its arrival to parry and counter. Each note is mapped to the nearest open string (E G A B D), so every attack is playable on open strings or the keyboard. In *free* phases, attack with combos and watch for the huff-and-puff wind (strum Em to block it).
+
+### Note input engine
+
+`frontend/src/lib/input/` (`detector.ts` + `noteInput.ts`), built on the tuner's Essentia.js loader and AudioWorklet pipeline (`src/lib/audio/`, mic constraints with echo cancellation, noise suppression and auto gain off):
+
+- **Onsets:** the pick's high-frequency transient, or a jump in loudness. This works even over ringing strings. A sustained note never re-triggers, and events are at least 120 ms apart.
+- **Notes:** Essentia PitchYin on the audio *after* the onset; two agreeing confident readings = one note (~50 ms after the pluck).
+- **Chords:** strummed strings make PitchYin unsure, so the HPCP chroma is matched against Em E G C D A Am once the strum has finished (~80 ms). A chord is emitted only if it's clearly ahead of the runner-up. Chord changes over ringing strings are matched on the *new* energy.
+- **Hammer-ons / slides** (1–4 semitones, while a note rings) also count as new notes.
+- Every `NoteEvent` is `{ type, pitchClass, midi?, chord?, time, confidence, source }`, timestamped at the pluck (accurate to ~1 ms).
+
+Measured with a synthetic guitar through the real pipeline (`/input-test` → *Run self-test*, or `npx tsx scripts/detector-bench.ts` offline):
+
+| | detected | pluck → event |
+|---|---|---|
+| single notes | 10/10 | ~50 ms |
+| Em chord | 10/10 | ~85 ms |
+| E → G → A | 29/30 notes (9/10 runs) | ~50 ms |
+| G → C → D chords | 8/9 | ~80 ms |
+
+A real guitar still needs checking: run `/input-test` with yours. The thresholds live at the top of `detector.ts`.
+
+### Tuning and dev tools
+
+- `frontend/src/lib/combat/combos.ts`: every move's inputs, damage, range, knockback, hit-stop and magic (data-driven).
+- `frontend/src/lib/combat/rhythm.ts`: Perfect/Good/parry windows; practice-mode widths.
+- `frontend/src/game/entities/Enemy.ts`: enemy stats. `scenes/Level1.ts`: waves. `scenes/Boss.ts`: wolf HP, parry damage, orb lead time.
+- `npx tsx scripts/combo-check.ts`: checks the combo rules.
+- `scripts/playtest-bot.js`: paste into the console on `/play` and it plays the whole game with the keyboard (dev builds expose `window.__game`, `window.__noteInput()`, and `window.__synthPlay([...])`, which plays synthesized plucks through the mic pipeline).
+- Leaving `/play` stops the mic (tracks stopped, AudioContext closed).
+
+---
+
+# Song → chart + sheet music (pipeline)
+
+Turns an MP3 (or, optionally, a YouTube link) into level data for the side-scrolling guitar game:
+
+| File | What it is |
+|---|---|
+| `chart.json` | time-stamped notes for **easy / medium / hard** (game level data) |
+| `score.alphatex` | tab + standard notation, rendered in the browser by alphaTab (one track per difficulty) |
+| `score.musicxml` | same score for MuseScore / Guitar Pro |
+| `transcription.mid` | raw Basic Pitch transcription |
+| `guitar.wav` | the isolated part the player plays |
+| `backing.mp3` | the song with that part removed (`backing + guitar = original mix`) |
+
+Everything runs locally: backend at http://localhost:8000, frontend at http://localhost:3000. No cloud, no auth, no database.
+
+## Setup (once)
+
+You need **Python 3.11**, **Node 20+** and **ffmpeg**. The setup script checks for them and prints the install command for anything missing:
+
+| | macOS | Windows | Linux |
+|---|---|---|---|
+| Python 3.11 | `brew install python@3.11` | `winget install Python.Python.3.11` | `sudo apt install python3.11 python3.11-venv` |
+| Node 20+ | `brew install node` | `winget install OpenJS.NodeJS.LTS` | NodeSource / `nvm` |
+| ffmpeg | `brew install ffmpeg` | `winget install Gyan.FFmpeg` | `sudo apt install ffmpeg` |
+
+```bash
+./setup.sh          # macOS / Linux
+```
+```powershell
+.\setup.ps1         # Windows
+```
+
+This creates `backend/.venv`, installs everything, runs `npm install`, and **downloads all models up front** (`backend/setup_models.py`: Demucs `htdemucs_6s` weights into `backend/models/`, plus a Basic Pitch warm-up). After that the pipeline works with no internet. On Windows with an NVIDIA GPU it installs the CUDA build of PyTorch.
+
+## Run
+
+```bash
+./dev.sh            # macOS / Linux   (Ctrl+C stops both servers)
+```
+```powershell
+.\dev.ps1           # Windows
+```
+
+Open **http://localhost:3000/preview**, drop in an MP3, watch the stages, then check the result: a lane view synced to the audio (toggle `guitar.wav` / `backing.mp3`, turn on "click on notes" to hear where the notes land), the alphaTab score for the selected difficulty, and download links for all six files. `?job=<id>` in the URL reopens a finished song.
+
+Demucs runs on an **NVIDIA GPU (CUDA)** if there is one, else **Apple Silicon (MPS)**, else **CPU**, and falls back to CPU if the GPU fails. The device is printed at startup and shown on the page.
+
+## Pre-process demo songs (CLI)
+
+```bash
+cd backend
+.venv/bin/python -m pipeline song.mp3 --out out/song/
+.venv/bin/python -m pipeline song.mp3 --out out/song/ --source other       # guitar stem too weak
+.venv/bin/python -m pipeline song.mp3 --out out/song/ --min-amplitude 0.35 # fewer ghost notes
+```
+
+| Flag | Default | |
+|---|---|---|
+| `--source guitar\|other\|vocals\|bass\|piano\|mix` | `guitar` | which stem to transcribe. A non-guitar stem is also removed from the backing track |
+| `--onset-threshold` | 0.5 | Basic Pitch: higher = fewer notes |
+| `--frame-threshold` | 0.3 | Basic Pitch: higher = shorter notes |
+| `--min-note-ms` | 80 | drop shorter notes |
+| `--min-amplitude` | 0.25 | drop quieter notes (0–1) |
+| `--device auto\|cuda\|mps\|cpu` | `auto` | Demucs device |
+| `--force` | | ignore the cache |
+
+Re-running the same file with the same settings is instant (cached by SHA-256 of the input). Changing a threshold re-runs everything except Demucs, because stems are cached separately in `stems/`.
+
+## API
+
+| | |
+|---|---|
+| `POST /jobs` | multipart `file=<mp3/wav>` (optional `source`, `title`, `force=1`), or JSON `{"youtubeUrl": "..."}` → `{jobId, status, cached, ...}` |
+| `GET /jobs/{id}` | `{status: queued\|running\|done\|error, stage, progress (0–1), error, failedStage, warnings, stemLevels, timings, files}` |
+| `POST /jobs/{id}/rerun` | JSON `{"source": "other", "force"?: false}`: same song, different stem. Takes seconds, because the Demucs stems are reused |
+| `GET /jobs/{id}/files/{name}` | one of the six files (`?download=1` for an attachment) |
+| `GET /jobs` | recent jobs |
+| `GET /health` | device, YouTube on/off |
+
+Interactive docs: http://localhost:8000/docs. Jobs run one at a time in a background thread inside the FastAPI process. Each job lives in `backend/data/jobs/<first 16 hex of sha256>/` (plus `-<source>` for non-guitar sources), and unfinished jobs are re-queued when the server restarts.
+
+## Warnings
+
+Finished jobs can carry `warnings` (shown as a yellow banner in the preview and printed by the CLI):
+
+- **`cut_off`**: the music stops early and the rest of the file is digital silence (typical of a failed online video-to-MP3 conversion). The silent tail is trimmed, so the chart and backing track end with the music; upload a complete copy to get the whole song.
+- **`weak_stem`**: the transcribed stem is quiet (under 20% of the song's level, or present in under 25% of it), so the chart will be thin. Comes with `suggestSources`: up to two stems that are clearly present (in the order other → piano → vocals → bass), then `mix`. The preview turns each into a one-click "Re-run with …" button.
+- **`few_notes`**: fewer than 0.5 notes per second on hard.
+
+`stemLevels` gives each stem's share of the song's level and how much of the song it's present in, so you can see where the instruments ended up.
+
+## chart.json
+
+```jsonc
+{
+  "version": 1,
+  "song": { "title": "...", "durationSec": 162.3, "bpm": 127.6, "timeSignature": [4, 4], "offsetSec": 1.81 },
+  "beats": [1.81, 2.28, ...],            // beat times (s); beats[0] is the first downbeat
+  "audio": { "backing": "backing.mp3", "guitarStem": "guitar.wav" },
+  "difficulties": { "easy": [Note], "medium": [Note], "hard": [Note] },
+  "meta": { "source": "guitar", "tuning": [...], "grids": {...} }   // extra, informational
+}
+// Note
+{ "t": 2.28, "dur": 0.23, "beat": 1.0, "midi": 64, "name": "E4", "string": 1, "fret": 0, "lane": 1, "velocity": 80 }
+```
+
+- `beat` is a fractional beat index: `beat k` = `beats[k]`, beat 0 = first downbeat = `offsetSec`, a new bar every 4 beats. Pickup notes before the first downbeat have negative beats.
+- `string` 1 = high E … 6 = low E (standard tuning, frets 0–12). `lane` = `string` for now; remap it in the game.
+- `velocity` is MIDI-style 1–127. Notes are sorted by `t`.
+
+### How the difficulties are built
+
+All three start from the same cleaned notes: short (<80 ms) and quiet notes are dropped, and notes outside the guitar's range are moved by octaves. Each difficulty then snaps onsets to its own grid. A note too far from that grid is **dropped instead of dragged**, so every note stays aligned with the audio.
+
+- **hard**: 1/16 grid, all notes (chords up to 6 strings).
+- **medium**: 1/8 grid, at most 2 simultaneous notes (the two highest).
+- **easy**: 1/4 grid, only the highest note per slot (no chords), at most 2 notes per beat (in practice 1). If a beat has nothing on it, the off-beat 8th can be used. Fingering favors open strings and low frets.
+
+Strings and frets are assigned greedily, keeping the hand close to where it was on the previous note (easy: lowest frets).
+
+## Project layout
+
+```
+backend/
+  pipeline/            # stages: audio.py (ingest), separate.py, beats.py, transcribe.py, chart.py, notation.py
+    runner.py          # runs the stages: timing, progress, caching, "Stage 'x' failed: ..." errors
+    __main__.py        # CLI
+    youtube.py         # optional, isolated (ENABLE_YOUTUBE=true)
+  app/                 # FastAPI server + job worker
+  setup_models.py      # download / verify models for offline use
+  tools/               # make_test_clip.py, eval_chart.py
+  tests/               # pytest: chart + notation rules
+  data/jobs/<hash>/    # job inputs and outputs (gitignored)
+frontend/              # Next.js + TypeScript; preview page at /preview
+  src/components/pipeline/   # PreviewPage, LaneView (canvas + audio sync), ScoreView (alphaTab)
+```
+
+## Settings (environment variables)
+
+| Variable | Default | |
+|---|---|---|
+| `ENABLE_YOUTUBE` | `false` | allow `{youtubeUrl}` jobs (yt-dlp, audio only). Any failure returns "Couldn't fetch that link, please upload an MP3 instead." |
+| `GS_DEVICE` | `auto` | force `cuda` / `mps` / `cpu` |
+| `GS_ONSET_THRESHOLD`, `GS_FRAME_THRESHOLD`, `GS_MIN_NOTE_MS`, `GS_MIN_AMPLITUDE` | see CLI | API-side tuning |
+| `GS_MAX_DURATION_SEC` | 480 | longer songs are rejected |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | frontend → backend URL |
+
+## Testing
+
+```bash
+cd backend
+.venv/bin/python -m pytest -q                                  # chart/notation rules (fast)
+.venv/bin/python tools/make_test_clip.py out/test_clip.mp3     # 30 s synthetic song with known notes
+.venv/bin/python -m pipeline out/test_clip.mp3 --out out/test_clip/
+.venv/bin/python tools/eval_chart.py out/test_clip/ --truth out/test_clip.truth.json
+```
+
+Measured on an M1 Pro (MPS):
+- 30 s clip: about 12–15 s total.
+- 2:42 full song: about 31 s (Demucs about 24 s).
+- Cached re-run: instant.
+
+On the synthetic clip, chart notes are a median of 7 ms from the true note times, and 100% of matched notes are within 50 ms.
+
+## Known limits
+
+- Assumes 4/4. The first downbeat is a heuristic (the beat position with the most kick/bass energy), so it can be off by a beat or two on sparse songs.
+- Transcription quality depends on the guitar stem. On mixes where Demucs puts the guitar into `other` (keys-like or heavily effected guitars), use `--source other`.
+- Hard mode on strummed songs is dense (every chord tone). Raise `--min-amplitude` or `--onset-threshold` to thin it out.
+- Windows/Linux setup follows the same steps but has only been run on macOS so far. Basic Pitch uses ONNX Runtime there; that path was checked on macOS and gives the same notes as CoreML.

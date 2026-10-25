@@ -44,7 +44,7 @@ export default function ChordBook({ playMode, practice, onPractice, onClose }: P
         </header>
         <p className="sb-intro">
           The bard walks on their own. Every foe shows a {what} over its head: play it and <b>every foe showing that {what}</b> is hit. Tougher foes need
-          a few, left to right. Wrong {what}s just fizzle. Play on the beat for <b>Perfect</b> (more magic), and the music follows whatever you play.
+          a few, in any order. Wrong {what}s just fizzle. Play on the beat for <b>Perfect</b> (more magic), and the music follows whatever you play.
           {playMode === "chords" ? " No guitar? Each card shows its key." : " Open strings are all you need."}
         </p>
         <label className="sb-practice">

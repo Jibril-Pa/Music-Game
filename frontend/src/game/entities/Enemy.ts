@@ -30,7 +30,10 @@ export interface EnemyDef {
   symbolCount: number;
   /** Attacks when this close. */
   contactRange: number;
+  /** It winds up (flickering) this long before the blow lands: the player's last chance. */
   windupMs: number;
+  /** From a blow until it comes again (ms, default 650): knocked back, then it waits. */
+  recoverMs?: number;
   texture: string;
   windupTexture?: string;
   body: [number, number];
@@ -47,27 +50,31 @@ export interface EnemyDef {
   verbs?: { hit: string; slain: string };
   /** Big hitter: a smash that shakes the screen. */
   heavy?: boolean;
-  /** Leaps as it bites. */
+  /** Crouches through its windup, then pounces: the leap lands with the bite. */
   hop?: boolean;
   /** The hero stops walking this far before it (big enemies block the path). */
   haltDistance: number;
 }
 
 const CANDY: Projectile = { texture: "candy", scale: 1.4, name: "candy", spin: true };
+/** After a blow, an attacker is knocked back for this long (ms). */
+const KNOCKBACK_MS = 650;
+/** A hopper pounces this long before its blow: about the hop's airtime, so it lands with the bite. */
+const POUNCE_MS = 180;
 
 export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
-  wolf: { name: "Forest Wolf", speed: 115, damage: 8, symbolCount: 1, contactRange: 85, windupMs: 380, texture: "wolf", windupTexture: "wolf_bite", body: [100, 60], weight: 1, hop: true, haltDistance: 150 },
+  wolf: { name: "Forest Wolf", speed: 115, damage: 8, symbolCount: 1, contactRange: 85, windupMs: 700, recoverMs: 1400, texture: "wolf", windupTexture: "wolf_bite", body: [100, 60], weight: 1, hop: true, haltDistance: 150 },
   goblin: { name: "Goblin", speed: 90, damage: 6, symbolCount: 1, contactRange: 75, windupMs: 380, texture: "goblin", body: [56, 84], weight: 0.9, haltDistance: 140 },
   troll: { name: "Bridge Troll", speed: 35, damage: 14, symbolCount: 3, contactRange: 150, windupMs: 750, texture: "troll", windupTexture: "troll_raise", body: [120, 170], weight: 3, heavy: true, haltDistance: 260 },
   witch: { name: "Gingerbread Witch", speed: 0, damage: 0, symbolCount: 2, contactRange: 0, windupMs: 0, texture: "witch", body: [64, 128], weight: 1.2, ranged: { projectile: CANDY, everyMs: 2700 }, altitude: 40, haltDistance: 480 },
-  pup: { name: "Wolf Pup", speed: 170, damage: 6, symbolCount: 1, contactRange: 75, windupMs: 300, texture: "wolf", windupTexture: "wolf_bite", body: [80, 48], weight: 0.8, scale: 0.78, hop: true, haltDistance: 140 },
+  pup: { name: "Wolf Pup", speed: 170, damage: 6, symbolCount: 1, contactRange: 75, windupMs: 600, recoverMs: 1300, texture: "wolf", windupTexture: "wolf_bite", body: [80, 48], weight: 0.8, scale: 0.78, hop: true, haltDistance: 140 },
   giant: { name: "Giant", speed: 30, damage: 18, symbolCount: 4, contactRange: 165, windupMs: 800, texture: "giant", windupTexture: "giant_raise", body: [130, 236], weight: 3.5, heavy: true, haltDistance: 300 },
 
   scorpion: { name: "Scorpion", speed: 130, damage: 7, symbolCount: 1, contactRange: 85, windupMs: 340, texture: "scorpion", windupTexture: "scorpion_strike", body: [110, 50], weight: 0.9, haltDistance: 150 },
   thief: { name: "Thief", speed: 105, damage: 8, symbolCount: 1, contactRange: 80, windupMs: 360, texture: "thief", windupTexture: "thief_swing", body: [56, 112], weight: 1, haltDistance: 150 },
   mummy: { name: "Mummy", speed: 45, damage: 12, symbolCount: 2, contactRange: 90, windupMs: 650, texture: "mummy", body: [56, 126], weight: 1.6, haltDistance: 200 },
   djinn: { name: "Fire Djinn", speed: 0, damage: 0, symbolCount: 2, contactRange: 0, windupMs: 0, texture: "djinn", body: [70, 150], weight: 1.2, ranged: { projectile: { texture: "fireball", scale: 0.55, name: "fireball" }, everyMs: 2600 }, altitude: 60, haltDistance: 460 },
-  jackal: { name: "Jackal", speed: 180, damage: 7, symbolCount: 1, contactRange: 80, windupMs: 300, texture: "jackal", windupTexture: "jackal_bite", body: [84, 50], weight: 0.8, scale: 0.85, hop: true, haltDistance: 140 },
+  jackal: { name: "Jackal", speed: 180, damage: 7, symbolCount: 1, contactRange: 80, windupMs: 580, recoverMs: 1250, texture: "jackal", windupTexture: "jackal_bite", body: [84, 50], weight: 0.8, scale: 0.85, hop: true, haltDistance: 140 },
   cavedoor: { name: "Cave Door", speed: 0, damage: 0, symbolCount: 3, contactRange: 0, windupMs: 0, texture: "cave_door", body: [140, 180], weight: 50, stationary: true, verbs: { hit: "the door rumbles", slain: "Open, Sesame!" }, haltDistance: 230 },
   sphinx: { name: "The Sphinx", speed: 0, damage: 0, symbolCount: 4, contactRange: 0, windupMs: 0, texture: "sphinx", body: [300, 210], weight: 50, ranged: { projectile: { texture: "riddle", scale: 1.3, name: "riddle", spin: true }, everyMs: 3000 }, haltDistance: 520 },
 
@@ -75,7 +82,7 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   tinsoldier: { name: "Tin Soldier", speed: 80, damage: 9, symbolCount: 1, contactRange: 80, windupMs: 420, texture: "tinsoldier", body: [50, 146], weight: 1.1, haltDistance: 150 },
   mech: { name: "Mech", speed: 40, damage: 16, symbolCount: 3, contactRange: 160, windupMs: 750, texture: "mech", windupTexture: "mech_raise", body: [130, 196], weight: 3, heavy: true, haltDistance: 270 },
   turret: { name: "Laser Turret", speed: 0, damage: 0, symbolCount: 2, contactRange: 0, windupMs: 0, texture: "turret", body: [90, 110], weight: 1.4, ranged: { projectile: { texture: "laser", scale: 1.2, name: "laser bolt", straight: true }, everyMs: 2200 }, altitude: 70, haltDistance: 460 },
-  robopup: { name: "Robo-Pup", speed: 190, damage: 7, symbolCount: 1, contactRange: 80, windupMs: 280, texture: "robopup", windupTexture: "robopup_bite", body: [84, 50], weight: 0.8, scale: 0.85, hop: true, haltDistance: 140 },
+  robopup: { name: "Robo-Pup", speed: 190, damage: 7, symbolCount: 1, contactRange: 80, windupMs: 560, recoverMs: 1200, texture: "robopup", windupTexture: "robopup_bite", body: [84, 50], weight: 0.8, scale: 0.85, hop: true, haltDistance: 140 },
   lasergate: { name: "Laser Gate", speed: 0, damage: 0, symbolCount: 3, contactRange: 0, windupMs: 0, texture: "laser_gate", body: [150, 300], weight: 50, stationary: true, verbs: { hit: "a laser fizzles out", slain: "gate shut down!" }, haltDistance: 230 },
   nightingale: { name: "The Clockwork Nightingale", speed: 0, damage: 0, symbolCount: 4, contactRange: 0, windupMs: 0, texture: "nightingale", body: [200, 170], weight: 2, ranged: { projectile: { texture: "note", scale: 1.2, name: "song note", spin: true }, everyMs: 2400 }, altitude: 150, haltDistance: 520 },
 };
@@ -108,6 +115,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   state: EnemyState = "approach";
   stateUntil = 0;
   nextThrowAt = 0;
+  private pounced = false;
+  private knockUntil = 0;
   readonly shadow: Phaser.GameObjects.Image;
   /** Speed and damage after the level's difficulty. */
   readonly speed: number;
@@ -189,36 +198,33 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.baseY = y;
   }
 
-  /** The symbols over its head; the next one is big and gold, with its key. */
+  /** The symbols over its head, each gold with its key: any of them can be played next. */
   private renderBadge() {
     const b = this.badge;
     b.removeAll(true);
     if (!this.symbols.length) return;
-    const items = this.symbols.map((sym, i) => {
-      const big = i === 0;
-      const t = this.scene.add
-        .text(0, 0, sym, { fontFamily: FONT, fontSize: big ? "30px" : "21px", fontStyle: "bold", color: "#2b1a12" })
-        .setOrigin(0.5);
-      return { t, w: Math.max(big ? 54 : 40, t.width + 20), h: big ? 46 : 34, big };
+    const items = this.symbols.map((sym) => {
+      const t = this.scene.add.text(0, 0, sym, { fontFamily: FONT, fontSize: "30px", fontStyle: "bold", color: "#2b1a12" }).setOrigin(0.5);
+      return { sym, t, w: Math.max(54, t.width + 20), h: 46 };
     });
     const total = items.reduce((sum, it) => sum + it.w, 0) + (items.length - 1) * 6;
     let x = -total / 2;
     const parts: Phaser.GameObjects.GameObject[] = [];
     for (const it of items) {
       const g = this.scene.add.graphics();
-      g.fillStyle(it.big ? 0xffd25e : 0xf6e7c1, it.big ? 1 : 0.92).fillRoundedRect(x, -it.h / 2, it.w, it.h, 12);
-      g.lineStyle(it.big ? 4 : 3, 0x2b1a12, 1).strokeRoundedRect(x, -it.h / 2, it.w, it.h, 12);
+      g.fillStyle(0xffd25e, 1).fillRoundedRect(x, -it.h / 2, it.w, it.h, 12);
+      g.lineStyle(4, 0x2b1a12, 1).strokeRoundedRect(x, -it.h / 2, it.w, it.h, 12);
       it.t.setPosition(x + it.w / 2, 0);
       parts.push(g, it.t);
+      const hint = this.host.keyHint(it.sym);
+      if (hint) {
+        parts.push(
+          this.scene.add
+            .text(x + it.w / 2, it.h / 2 + 12, hint, { fontFamily: FONT, fontSize: "15px", fontStyle: "bold", color: "#fff6dc", stroke: "#2b1a12", strokeThickness: 4 })
+            .setOrigin(0.5),
+        );
+      }
       x += it.w + 6;
-    }
-    const hint = this.host.keyHint(this.symbols[0]);
-    if (hint) {
-      parts.push(
-        this.scene.add
-          .text(-total / 2 + items[0].w / 2, items[0].h / 2 + 12, hint, { fontFamily: FONT, fontSize: "15px", fontStyle: "bold", color: "#fff6dc", stroke: "#2b1a12", strokeThickness: 4 })
-          .setOrigin(0.5),
-      );
     }
     b.add(parts);
     b.setScale(0.6);
@@ -241,10 +247,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.angle += (target - this.angle) * 0.35;
   }
 
-  /** One matching chord: pops the next symbol. Returns true if that slew it. */
-  hit(now: number): boolean {
+  /** One matching chord: pops that symbol (any of them, in any order; the first if none is given). Returns true if that slew it. */
+  hit(now: number, symbol?: string): boolean {
     if (!this.alive || !this.symbols.length) return false;
-    this.symbols.shift();
+    const at = symbol === undefined ? 0 : this.symbols.indexOf(symbol);
+    this.symbols.splice(Math.max(0, at), 1);
     flashSprite(this.scene, this, 0xffffff, 80);
     if (!this.symbols.length) {
       this.die();
@@ -328,6 +335,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.state === "windup") {
       this.setVelocityX(0);
       this.setTint(Math.floor(now / 80) % 2 ? 0xffb066 : light.tint);
+      if (this.def.hop && !this.flying && !this.pounced && this.stateUntil - now <= POUNCE_MS) {
+        this.pounced = true;
+        this.setVelocityY(-160);
+        return;
+      }
       if (now >= this.stateUntil) {
         restoreTint(this);
         if (Math.abs(dx) <= this.def.contactRange + 50) {
@@ -338,12 +350,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         // Bounce back and come again.
         this.setVelocity((-dir * 330) / this.def.weight, this.flying ? 0 : -200 / Math.sqrt(this.def.weight));
         this.state = "recover";
-        this.stateUntil = now + 650;
+        this.knockUntil = now + KNOCKBACK_MS;
+        this.stateUntil = now + (this.def.recoverMs ?? KNOCKBACK_MS);
         this.scene.time.delayedCall(200, () => this.alive && this.setTexture(this.def.texture));
       }
       return;
     }
     if (this.state === "recover") {
+      // Knocked back, then it stands and catches its breath before coming again.
+      if (now >= this.knockUntil) this.setVelocityX(0);
       if (now >= this.stateUntil) this.state = "approach";
       return;
     }
@@ -352,9 +367,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (Math.abs(dx) <= this.def.contactRange) {
       this.state = "windup";
       this.stateUntil = now + this.def.windupMs;
+      this.pounced = false;
       this.setVelocityX(0);
       if (this.def.windupTexture) this.setTexture(this.def.windupTexture);
-      if (this.def.hop && !this.flying) this.setVelocityY(-160);
     } else {
       this.setVelocityX(dir * this.speed);
     }

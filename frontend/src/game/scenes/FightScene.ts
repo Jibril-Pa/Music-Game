@@ -27,9 +27,11 @@ export interface SymbolTarget {
   readonly y: number;
   readonly alive: boolean;
   readonly next: string | undefined;
+  /** Every symbol it takes right now, in any order (default: just `next`). */
+  readonly wants?: readonly string[];
   readonly hitHeight: number;
-  /** One matching chord landed. */
-  strike(now: number, grade: Grade | null): { slain: boolean; label: string };
+  /** One matching chord landed: `symbol` is which of its symbols was played. */
+  strike(now: number, grade: Grade | null, symbol: string): { slain: boolean; label: string };
 }
 
 /** Something a caster threw: candy, fireball, riddle, laser bolt, song note. */
@@ -277,8 +279,13 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
 
     const view = this.cameras.main.worldView;
     const visible = (t: SymbolTarget) => t.x < view.right - 10 && t.x > view.x - 40;
-    const targets = this.allTargets().filter((t) => t.alive && t.next && visible(t) && matches(ev, t.next, mode, practice));
-    if (!targets.length) {
+    // A foe with several chords takes them in any order.
+    const hits = this.allTargets().flatMap((t) => {
+      if (!t.alive || !t.next || !visible(t)) return [];
+      const symbol = (t.wants ?? [t.next]).find((s) => matches(ev, s, mode, practice));
+      return symbol ? [{ t, symbol }] : [];
+    });
+    if (!hits.length) {
       this.fizzle(ev);
       stats.misses++;
       this.emitHeard({ ev, grade, result: "no match", hit: false });
@@ -290,9 +297,9 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     this.hero.actionUntil = now + 220;
     const labels: string[] = [];
     let slain = 0;
-    for (const t of targets) {
+    for (const { t, symbol } of hits) {
       this.bolt(t);
-      const r = t.strike(now, grade);
+      const r = t.strike(now, grade, symbol);
       labels.push(r.label);
       if (r.slain) slain++;
       this.hero.addMagic(6 * (grade ? GRADE_MAGIC[grade] : 1));
@@ -376,9 +383,12 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
         get next() {
           return e.next;
         },
+        get wants() {
+          return e.symbols;
+        },
         hitHeight: e.hitHeight,
-        strike: (now: number) => {
-          const slain = e.hit(now);
+        strike: (now: number, _grade: Grade | null, symbol: string) => {
+          const slain = e.hit(now, symbol);
           const name = e.def.name.replace(/^The /, "").toLowerCase();
           const v = e.def.verbs;
           return { slain, label: slain ? (v?.slain ?? `slew the ${name}`) : (v?.hit ?? `hit the ${name}`) };
@@ -588,7 +598,7 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     EventBus.emit(EV.hud, state);
   }
 
-  /** What the chord helper should show: on-screen foes' next chords (nearest first), then heal/super. */
+  /** What the chord helper should show: on-screen foes' chords (nearest first), then heal/super. */
   private wantedSymbols(): NonNullable<HudState["wanted"]> {
     const view = this.cameras.main.worldView;
     const out: NonNullable<HudState["wanted"]> = [];
@@ -597,9 +607,10 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
       .filter((t) => t.alive && t.next && t.x < view.right + 40 && t.x > view.x - 40)
       .sort((a, b) => a.x - b.x);
     for (const t of targets) {
-      if (!seen.has(t.next!)) {
-        seen.add(t.next!);
-        out.push({ symbol: t.next!, role: "foe" });
+      for (const symbol of t.wants ?? [t.next!]) {
+        if (seen.has(symbol)) continue;
+        seen.add(symbol);
+        out.push({ symbol, role: "foe" });
       }
     }
     const howl = this.upcomingSymbols()[0];

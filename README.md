@@ -35,7 +35,7 @@ Each world has its own foes (wolves and goblins; scorpions, thieves, mummies and
 Inspired by Google's *Magic Cat Academy* doodle, with a guitar instead of a mouse:
 
 - **The bard walks on their own** (auto-scroller). Foes come in from the right.
-- **Every foe shows a chord over its head. Play it to slay them.** Every foe showing that chord is hit at once. Any foe may be a tougher one that needs 2–3 chords, played left to right (more likely in later levels). Set pieces block the path until you've played all their chords; casters (the witch, djinn, turrets, the Sphinx, the Nightingale) throw things that also carry chords.
+- **Every foe shows a chord over its head. Play it to slay them.** Every foe showing that chord is hit at once. Any foe may be a tougher one that needs 2–3 chords, played in any order (more likely in later levels). Set pieces block the path until you've played all their chords; casters (the witch, djinn, turrets, the Sphinx, the Nightingale) throw things that also carry chords.
 - **Chords:** Em, G, D, C, Am. Em and G come first; the rest join as you go. They're all in E minor, the key of the music, so whatever you play fits.
 - **The music follows you:** when you play a chord (or note), the backing's bass and harmony move to it on the next half-beat, so your playing blends in.
 - **Fairy godmother:** appears now and then (and when you're low). Play **A** to heal 25%.

@@ -16,7 +16,8 @@
  *     --trace     each event's new sound vs the expected leak, real and fake
  *     --why-ignored   what the game played around each real note it ignored
  *     --learn=0.5     how the guard learns at that speaker level
- *     --why       the detector's reasoning for guitar it got wrong (no music)
+ *     --why       the detector's reasoning for guitar it got wrong (no music;
+ *                 --why=0.3 at that speaker level, guard off)
  *   ECHO='{"matchFactor":1.4}' / DETECT='{...}' try other settings.
  */
 import { createRequire } from "node:module";
@@ -206,6 +207,9 @@ const rmsOf = (a: Float32Array) => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / 
 const HOP = 512;
 const outLevel = Array.from({ length: Math.floor(n / HOP) }, (_, i) => rmsOf(tapped.subarray(i * HOP, (i + 1) * HOP)));
 const guitarRms = rmsOf(guitar);
+// --why (no music) or --why=LEVEL: explain the misses at that speaker level.
+const whyArg = process.argv.find((a) => a === "--why" || a.startsWith("--why="));
+const whyLevel = whyArg === undefined ? NaN : whyArg === "--why" ? 0 : Number(whyArg.slice(6));
 const musicRms = rmsOf(leak);
 
 function run(level: number, guard: boolean) {
@@ -214,7 +218,7 @@ function run(level: number, guard: boolean) {
   const k = (level * guitarRms) / musicRms;
   const mix = Float32Array.from(guitar, (v, i) => v + leak[i] * k);
   const det = new NoteDetector({ ...DETECT_CONFIG, ...JSON.parse(process.env.DETECT ?? "{}") });
-  if (process.argv.includes("--why") && !guard && level === 0) det.debug = (m) => why.push(`${(lastEnd / 1000).toFixed(3)} ${m}`);
+  if (!guard && level === whyLevel) det.debug = (m) => why.push(`${(lastEnd / 1000).toFixed(3)} ${m}`);
   const echo = new EchoGuard({ ...ECHO_CONFIG, ...JSON.parse(process.env.ECHO ?? "{}") });
   let learnedAt: number | null = null;
   let maxCoupling = 0;
@@ -276,7 +280,7 @@ function run(level: number, guard: boolean) {
     console.log(`  L${level} fakes: ${checks.filter((x) => !x.real).map(fmt).join("  ")}`);
   }
   if (why.length) {
-    // --why: the detector's reasoning around each guitar item it got wrong (no music).
+    // --why: the detector's reasoning around each guitar item it got wrong.
     for (const g of res.groups) console.log(`  ${g.group}: ${g.wrong.join(", ")}`);
     for (const it of test.items) {
       const t = (INTRO + it.offsetSec) * 1000;

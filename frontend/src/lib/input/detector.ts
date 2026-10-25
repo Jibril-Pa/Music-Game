@@ -11,6 +11,9 @@
  *  2. While deciding, PitchYin runs every hop on audio from after the onset
  *     only (at least ~32 ms of it; earlier windows still hold the previous
  *     note). Two agreeing, confident readings = a single note (~45 ms).
+ *     A low reading that is really a bass note under a higher note (its
+ *     loudest partial is a 3rd/5th/6th/7th harmonic, and it has a bass's
+ *     strong fundamental and weak octaves) is reported as the higher note.
  *  3. Several strings at once make PitchYin unsure. If it never gets a
  *     confident reading, chroma (Essentia HPCP, averaged over a few hops once
  *     the strum has finished, ~75 ms) is matched against the game's chord
@@ -82,16 +85,23 @@ export const DETECT_CONFIG = {
   pitchChangeMaxSemitones: 4,
   minHz: 70,
   maxHz: 1100,
+  /** A note read below this (Hz) may be a bass note under a higher one (see overBass)... */
+  bassMaxHz: 140,
+  /** ...when that low tone's fundamental is within this many dB of the loudest partial... */
+  bassFundamentalDb: 10,
+  /** ...and its octaves are at least this many dB weaker than its fundamental. */
+  bassOctaveDb: 3,
   /** Hops of silence before a ringing note is considered over. */
   releaseHops: 6,
 
   // ---- guitar-only gate
   /** A note's agreeing readings must also be this close in pitch (cents). */
   maxPitchSpreadCents: 25,
-  /** The level must reach 80% of its peak this soon after the onset (a pluck is fast)... */
-  noteAttackHops: 3,
+  /** The level must reach 80% of its peak within this many hops of the onset (~90 ms; real
+   * plucks took up to 7 hops, voices swell for longer)... */
+  noteAttackHops: 8,
   /** ...a strum spreads over a few strings. */
-  chordAttackHops: 6,
+  chordAttackHops: 10,
   /** Don't decide while the level is still climbing by more than this factor. */
   swellRatio: 1.12,
   /** At decision time the sound must still be this fraction of its peak. */
@@ -427,13 +437,21 @@ export class NoteDetector {
     }
     // A clear, different chord in the plain reading wins. Only when the plain
     // reading is still the previous chord (strings ringing on) or unclear,
-    // trust what's new since the onset.
+    // trust what's new since the onset, and only if it names the same chord or
+    // fits its chord better than the plain reading fits its own. Re-strumming
+    // the ringing chord leaves a lopsided remainder that can look like a
+    // neighbouring chord (Em -> G, C -> G), but it fits worse; a real change
+    // over ringing strings fits better.
     let pick = plain;
     let shown: Float32Array = avg;
     const plainIsNew = plain.ok && plain.name !== this.lastChordName;
-    if (!plainIsNew && novel?.ok) {
+    if (!plainIsNew && novel?.ok && (novel.name === plain.name || novel.score > plain.score)) {
       pick = novel;
       shown = novelChroma!;
+    }
+    if (this.debug) {
+      const f = (r: ChordCheck) => `${r.name} ${r.score.toFixed(3)} (+${r.margin.toFixed(3)})${r.ok ? "" : " unclear"}`;
+      this.debug(`  chord: plain ${f(plain)}${novel ? `, new energy ${f(novel)}` : ""}, last ${this.lastChordName} -> ${pick.ok ? pick.name : "undecided"}`);
     }
     this.lastChroma = shown;
     const ranked = rankChords(shown, CHORD_LIST);
@@ -494,6 +512,48 @@ export class NoteDetector {
     return added >= c.relativeLevel * sorted[sorted.length >> 1];
   }
 
+  /**
+   * PitchYin reads the period of everything sounding, so a note played over a
+   * bass note (a backing track, the game's own bass line) can come out as the
+   * bass: B4 over an E2 bass reads as E, since B4 is E2's 6th harmonic. If a
+   * low reading's loudest partial is its 3rd, 5th, 6th or 7th and the low
+   * tone itself is bass-like (a strong fundamental with weaker octaves; a
+   * guitar string's octaves are as loud as its fundamental or louder), the
+   * note is that partial. Octave errors don't matter: only the pitch class does.
+   */
+  private overBass(note: Reading, frame: Float32Array, sampleRate: number, endTime: number): Reading {
+    const c = this.cfg;
+    if (note.hz >= c.bassMaxHz) return note;
+    // The same audio the readings came from: since the onset, at most pitchFrame.
+    const since = Math.round(((endTime - this.onsetTime) / 1000) * sampleRate);
+    const x = frame.subarray(frame.length - Math.min(c.pitchFrame, since));
+    const n = x.length;
+    const windowed = new Float32Array(n);
+    for (let i = 0; i < n; i++) windowed[i] = x[i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)));
+    // Goertzel: the level at one frequency.
+    const levelAt = (hz: number) => {
+      const coeff = 2 * Math.cos((2 * Math.PI * hz) / sampleRate);
+      let s1 = 0;
+      let s2 = 0;
+      for (let i = 0; i < n; i++) {
+        const s0 = windowed[i] + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+      }
+      return Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - coeff * s1 * s2));
+    };
+    // Partials 1..8, each allowing a quarter semitone of mistuning.
+    const amp = [1, 2, 3, 4, 5, 6, 7, 8].map((h) => Math.max(...[0.985, 1, 1.015].map((k) => levelAt(h * note.hz * k))));
+    const max = Math.max(...amp);
+    const db = amp.map((v) => 20 * Math.log10(v / max + 1e-12));
+    const top = amp.indexOf(max) + 1;
+    const octaves = Math.max(db[1], db[3], db[7]);
+    const bass = [3, 5, 6, 7].includes(top) && db[0] >= -c.bassFundamentalDb && octaves <= db[0] - c.bassOctaveDb;
+    const midi = Math.round(hzToMidi(note.hz * top));
+    this.debug?.(`  low ${note.pc}: partials ${db.map((v) => v.toFixed(0)).join(" ")} dB${bass ? ` -> bass under ${pitchClassOf(midi)}` : ""}`);
+    return bass ? { pc: pitchClassOf(midi), midi, hz: note.hz * top, conf: note.conf } : note;
+  }
+
   /** Not a guitar event: go back to whatever was ringing before it. */
   private drop(why: string) {
     this.debug?.(`  dropped: ${why}`);
@@ -507,7 +567,8 @@ export class NoteDetector {
     const env = this.envelope();
     // Still swelling (a voice, a bowed note...): wait and see.
     const waiting = env.swelling && elapsed < c.decisionTimeoutMs;
-    const note = waiting ? null : this.noteCandidate();
+    const reading = waiting ? null : this.noteCandidate();
+    const note = reading && this.overBass(reading, frame, sampleRate, endTime);
 
     let d: Detection | null = null;
     if (note) {
@@ -524,7 +585,8 @@ export class NoteDetector {
       }
     }
     if (!d && elapsed >= c.decisionTimeoutMs) {
-      const late = env.swelling ? null : this.timeoutNote();
+      const lateReading = env.swelling ? null : this.timeoutNote();
+      const late = lateReading && this.overBass(lateReading, frame, sampleRate, endTime);
       if (late && env.attack <= c.noteAttackHops && env.sustained) {
         d = { type: "note", pitchClass: late.pc, midi: late.midi, onsetTime: this.onsetTime, confidence: late.conf, via: "timeout" };
       } else {

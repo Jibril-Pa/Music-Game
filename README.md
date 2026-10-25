@@ -69,7 +69,7 @@ Measured with a synthetic guitar through the real pipeline (`/input-test` → *R
 | E then G notes | 20/20 | ~50 ms |
 | chord changes Em G D C Am (0.9 s apart, old strings still ringing) | 9–10 of 10 | ~85 ms |
 
-**On a real guitar recording** (`npx tsx scripts/real-audio-check.ts <jobId> [guitar|input] [--highpass=200] [--ref=twinkle]`, which runs the detector over a WAV from the song pipeline): on the *Twinkle Twinkle* play-along (real guitar, single notes, E major), scored against the true melody, the detector names **97% of the notes it hears correctly** when the guitar is on its own (the backing's bass filtered out), and catches 86% of them. Two real-world fixes came out of this (being folded into `detector.ts`): real plucks rise slower than the synthetic ones the "slow attack" check was tuned on (loosening it catches 93–95% with no extra noise let through), and a bass note sounding under the melody can make it read a deep subharmonic (B4 heard as E), which matters when the game's music leaks from laptop speakers. Try yours on `/input-test`; the thresholds live at the top of `detector.ts`.
+**On a real guitar recording** (`npx tsx scripts/real-audio-check.ts <jobId> [guitar|input] [--highpass=200] [--ref=twinkle]`, which runs the detector over a WAV from the song pipeline): on the *Twinkle Twinkle* play-along (real guitar, single notes, E major), scored against the true melody, the detector **catches 40 of the 42 notes and names 95% of them correctly** when the guitar is on its own (the backing's bass filtered out). Two fixes came out of this recording. Real plucks rise slower than the synthetic ones the "slow attack" check was tuned on, so it now allows ~90 ms (it caught 36 of the 42 before, and no bench lets more noise through). And a note played over a bass note can read as the bass (B4 over E2 heard as E: B4 is E2's 6th harmonic), which matters when the game's music leaks from laptop speakers; a low reading whose loudest partial is its 3rd/5th/6th/7th, with a bass's strong fundamental and weak octaves, now counts as that partial. With the backing's bass left in, right notes went from 67% to 80%; on a guitar lesson recording the rule changed 17 notes, each to a note the transcription has there, and left the real open-A and low-E notes alone. Try yours on `/input-test`; the thresholds live at the top of `detector.ts`.
 
 ### Listening only to your guitar
 
@@ -84,9 +84,9 @@ Offline benches (from `frontend/`; each takes `--trace`, and `DETECT='{...}'` / 
 
 | | what it checks | now |
 |---|---|---|
-| `npx tsx scripts/detector-bench.ts [44100]` | guitar recall, synthetic self-test | 48/50 at 48 kHz (two Em heard as G), 50/50 at 44.1 kHz |
-| `npx tsx scripts/noise-bench.ts` | voices, singing, keyboard clicks, fan hiss and leaked strums between guitar notes, as loud as the guitar | fake events 21 → 13 (speech 0, singing 1, clicks 1); guitar 44/50 |
-| `npx tsx scripts/echo-bench.ts [--onbeat] [--flat] [--song] [--skew=25]` | the game's groove leaking from laptop speakers at normal / loud / very loud volume | fake events 18 → 0, 39 → 1, 52 → 2; guitar within 1 of no guard; nothing ignored with headphones |
+| `npx tsx scripts/detector-bench.ts [44100]` | guitar recall, synthetic self-test | 49/50 at 48 kHz (one chord change heard as G), 50/50 at 44.1 kHz |
+| `npx tsx scripts/noise-bench.ts` | voices, singing, keyboard clicks, fan hiss and leaked strums between guitar notes, as loud as the guitar | fake events 21 → 12 (speech syllables 0, singing 1, clicks 1); guitar 45/50 |
+| `npx tsx scripts/echo-bench.ts [--onbeat] [--flat] [--song] [--skew=25]` | the game's groove leaking from laptop speakers at normal / loud / very loud volume | fake events 17 → 0, 38 → 1, 50 → 2; guitar within 1 of no guard; nothing ignored with headphones |
 
 ### Tuning and dev tools
 

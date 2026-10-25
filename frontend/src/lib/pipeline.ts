@@ -1,6 +1,25 @@
 // Types + tiny client for the local FastAPI pipeline (backend/app/main.py).
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const LOCAL_API = "http://localhost:8000";
+
+/**
+ * Where the FastAPI backend is. NEXT_PUBLIC_API_URL wins: a hosted backend (e.g.
+ * https://api.thetravelinglute.tech), or "off" for none. Without it, only a page opened on this
+ * computer (localhost) uses the local backend. The public site (https://thetravelinglute.tech) then
+ * calls nothing: Chrome would ask every visitor to let it reach apps on their device, and nobody else
+ * runs our backend. The game still plays: demo boss songs, and the lute's built-in tips.
+ */
+function apiBase(): string {
+  const env = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (env) return env === "off" ? "" : env.replace(/\/+$/, "");
+  if (typeof window === "undefined") return LOCAL_API;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host.endsWith(".localhost") ? LOCAL_API : "";
+}
+
+export const API_BASE = apiBase();
+/** false: no backend for this page (the public site without a hosted one). Skip every call. */
+export const HAS_BACKEND = API_BASE !== "";
 
 export type Difficulty = "easy" | "medium" | "hard";
 export const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];

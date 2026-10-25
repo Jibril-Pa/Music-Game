@@ -109,6 +109,16 @@ TIGER_DATABASE_URL=postgresql://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=
 
 Restart `./dev.sh`. The tables are created on the first connection, and `GET /health` shows `coach: {tiger, gemini}` (`ok`, `off` or the error). To try it without Tiger Cloud, run a local TimescaleDB: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=pw timescale/timescaledb:latest-pg17`, then set `TIGER_DATABASE_URL=postgresql://postgres:pw@localhost:5432/postgres`.
 
+### Deploy (https://thetravelinglute.tech)
+
+The frontend is a static Next.js site, so it deploys to Vercel as is:
+
+1. On [vercel.com](https://vercel.com), **Add New → Project**, import this GitHub repo, set **Root Directory** to `frontend`, and deploy (Next.js is detected; no env vars needed).
+2. **Settings → Domains**: add `thetravelinglute.tech` (and `www`, redirecting to it). Vercel shows the DNS records to add.
+3. At get.tech (where the domain was registered): **Manage Orders** → the domain → **Manage DNS**. Add an **A** record for the bare domain with the IP on Vercel's domain card, and a **CNAME** for `www` with the card's target. Remove any other A or AAAA records on the bare domain (the parking page). Vercel turns on HTTPS by itself once DNS has spread (minutes to a few hours). The mic needs HTTPS.
+
+On the public site the game, the ear, every world, the demo boss songs and the lute's built-in tips all work. Song uploads and the Gemini / Tiger Data coach need the Python backend: run `./dev.sh` and play at http://localhost:3000, or host the backend and set `NEXT_PUBLIC_API_URL` in Vercel (and add the site to `GS_CORS_ORIGINS` if it isn't https://thetravelinglute.tech).
+
 ### Tuning and dev tools
 
 - `frontend/src/lib/combat/spells.ts`: which chords foes use and when, the heal/super chords, how often foes are tougher, song note → chord mapping.
@@ -278,7 +288,7 @@ frontend/              # Next.js + TypeScript; preview page at /preview
 | `GS_DEVICE` | `auto` | force `cuda` / `mps` / `cpu` |
 | `GS_ONSET_THRESHOLD`, `GS_FRAME_THRESHOLD`, `GS_MIN_NOTE_MS`, `GS_MIN_AMPLITUDE` | see CLI | API-side tuning |
 | `GS_MAX_DURATION_SEC` | 480 | longer songs are rejected |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | frontend → backend URL |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` when the page is opened on localhost, else none | frontend → backend URL. On the public site (no backend) the game calls nothing: demo boss songs and built-in tips. Set it to a hosted backend's URL, or `off` |
 | `GEMINI_API_KEY` | | the lute's advice (Gemini). In `backend/.env` |
 | `GEMINI_MODEL` | `gemini-3.8-flash` | falls back to `gemini-flash-latest` if the model isn't available |
 | `TIGER_DATABASE_URL` | | Tiger Data service URL (any TimescaleDB works). In `backend/.env` |

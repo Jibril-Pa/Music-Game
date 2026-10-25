@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   API_BASE,
   DIFFICULTIES,
+  HAS_BACKEND,
   OUTPUT_FILES,
   SCORE_TRACK_INDEX,
   SOURCE_LABELS,
@@ -78,6 +79,11 @@ export default function PreviewPage() {
   }, []);
 
   useEffect(() => {
+    // The public site has no backend: say where the workshop runs instead of trying localhost.
+    if (!HAS_BACKEND) {
+      queueMicrotask(() => setBackendDown(true));
+      return;
+    }
     getHealth()
       .then((h) => setHealth(h))
       .catch(() => setBackendDown(true));
@@ -202,7 +208,11 @@ export default function PreviewPage() {
       <header className="page-header">
         <h1>Song → chart + sheet music</h1>
         <div className="muted small">
-          {backendDown ? (
+          {backendDown && !HAS_BACKEND ? (
+            <span>
+              The Song Workshop runs on your own computer (it splits songs with Demucs): clone the repo and run <code>./dev.sh</code>.
+            </span>
+          ) : backendDown ? (
             <span className="error">
               Backend not reachable at {API_BASE}. Start it with <code>./dev.sh</code>.
             </span>

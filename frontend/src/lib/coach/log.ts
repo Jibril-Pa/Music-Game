@@ -5,19 +5,21 @@
  * A run starts with the first level played after the title or an End screen, and ends at the End
  * screen (or when you quit to the title). Nothing here may slow the game: posts are text/plain (a
  * "simple" request, so no CORS preflight), never awaited by the game, and dropped when the backend
- * is down. NEXT_PUBLIC_COACH=off keeps everything in the browser (built-in tips only).
+ * is down. NEXT_PUBLIC_COACH=off, or no backend for this page (see HAS_BACKEND), keeps everything in the
+ * browser (built-in tips only).
  */
 
 import type { GameOverInfo, GameStats, HeardEntry } from "@/game/events";
 import { levelAt } from "@/game/levels";
 import { session } from "@/game/state";
 import { playedLabel } from "@/lib/combat/spells";
-import { API_BASE } from "@/lib/pipeline";
+import { API_BASE, HAS_BACKEND } from "@/lib/pipeline";
 import { localAdvice } from "./advice";
 import { NOTE_SUFFIX, guessTarget, summarizeRun } from "./summary";
 import type { CoachResult, History, PlayRecord, RunSummary } from "./types";
 
-const ONLINE = process.env.NEXT_PUBLIC_COACH !== "off";
+/** Send plays and ask Gemini only where there's a backend (not the public site without one). */
+const ONLINE = process.env.NEXT_PUBLIC_COACH !== "off" && HAS_BACKEND;
 const PLAYER_KEY = "traveling-bard:player";
 /** Batches go out this often during play... */
 const FLUSH_MS = 5000;

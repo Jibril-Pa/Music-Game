@@ -11,7 +11,7 @@
  */
 
 import type { Chart } from "@/lib/pipeline";
-import { API_BASE, fileUrl } from "@/lib/pipeline";
+import { API_BASE, HAS_BACKEND, fileUrl } from "@/lib/pipeline";
 import { BufferSong, ProceduralMusic, type MusicWorld, type SongClock } from "@/lib/game-audio/music";
 import { bestChord, chordMidis, symbolForSongNote, type PlayMode } from "@/lib/combat/spells";
 
@@ -178,6 +178,7 @@ export interface JobSongInfo {
 }
 
 export async function listProcessedSongs(): Promise<JobSongInfo[]> {
+  if (!HAS_BACKEND) return []; // the public site: the demo song
   try {
     const res = await fetch(`${API_BASE}/jobs`, { cache: "no-store", signal: AbortSignal.timeout(2500) });
     if (!res.ok) return [];

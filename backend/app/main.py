@@ -8,12 +8,15 @@ POST /jobs/{id}/rerun           JSON {"source": "other", "force"?: false}: same 
 GET  /jobs/{id}/files/{name}    chart.json | score.alphatex | score.musicxml |
                                 transcription.mid | guitar.wav | backing.mp3   (?download=1)
 GET  /health
+
+The lute's coach (app/coach_api.py): POST /plays, POST /coach, GET /progress/{playerId}
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import tempfile
 import warnings
 from contextlib import asynccontextmanager
@@ -30,6 +33,9 @@ from pipeline import youtube
 from pipeline.audio import sha256_file
 from pipeline.env import DATA_DIR, JOBS_DIR
 
+from . import tiger
+from .coach import coach
+from .coach_api import router as coach_router
 from .jobs import JobStore, public_status
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S")
@@ -65,17 +71,29 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # torch import problems shouldn't stop the API
         DEVICE = f"unavailable ({e})"
     log.info("Demucs device: %s | YouTube links: %s | data: %s", DEVICE, "on" if youtube.enabled() else "off", DATA_DIR)
+    log.info("Coach: Gemini %s (%s) | Tiger Data %s", "on" if coach.configured() else "off", coach.model, "on" if tiger.configured() else "off")
+    tiger.warm_up()
     store.start()
     yield
+    tiger.close()
 
 
 app = FastAPI(title="guitar-scroller pipeline", lifespan=lifespan)
+# The dev server, the deployed game (thetravelinglute.tech), and any extras in GS_CORS_ORIGINS.
+CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://thetravelinglute.tech",
+    "https://www.thetravelinglute.tech",
+    *[o.strip().rstrip("/") for o in os.environ.get("GS_CORS_ORIGINS", "").split(",") if o.strip()],
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(coach_router)
 
 
 def bad_request(msg: str, code: int = 400) -> JSONResponse:
@@ -84,7 +102,13 @@ def bad_request(msg: str, code: int = 400) -> JSONResponse:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "device": DEVICE, "youtubeEnabled": youtube.enabled(), "queued": store.q.qsize()}
+    return {
+        "ok": True,
+        "device": DEVICE,
+        "youtubeEnabled": youtube.enabled(),
+        "queued": store.q.qsize(),
+        "coach": {"tiger": tiger.status(), "gemini": coach.status, "model": coach.model},
+    }
 
 
 @app.post("/jobs")

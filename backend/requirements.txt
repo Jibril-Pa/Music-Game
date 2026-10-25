@@ -35,3 +35,8 @@ yt-dlp
 
 # Tests
 pytest
+
+# The lute's coach (both optional; set keys in backend/.env)
+python-dotenv>=1.0
+psycopg[binary,pool]>=3.2   # Tiger Data (TimescaleDB on Tiger Cloud)
+google-genai>=1.30          # Gemini API

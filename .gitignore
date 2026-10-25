@@ -25,3 +25,6 @@ frontend/public/alphatab/
 .vscode/
 .idea/
 .env*.local
+
+# Secrets (Gemini key, Tiger Data URL): see backend/.env.example
+.env

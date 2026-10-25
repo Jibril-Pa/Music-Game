@@ -3,15 +3,21 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { DetectorDiag } from "@/lib/input/detector";
-import { KEY_CHORDS, KEY_NOTES, getNoteInput, disposeNoteInput, type LatencyStats, type MicStatus } from "@/lib/input/noteInput";
+import { KEY_CHORDS, KEY_NOTES, getNoteInput, disposeNoteInput, type EchoStats, type LatencyStats, type MicStatus } from "@/lib/input/noteInput";
 import { buildSelfTest, scoreSelfTest, type GroupResult } from "@/lib/input/selfTest";
 import { PITCH_CLASSES, type NoteEvent } from "@/lib/input/types";
 import { nearestNote } from "@/lib/audio/pitch";
 
-type Diag = DetectorDiag & { latency: LatencyStats };
+type Diag = DetectorDiag & { latency: LatencyStats; echo: EchoStats };
 
 function fmtMs(v: number | null | undefined) {
   return v === null || v === undefined ? "–" : `${Math.round(v)} ms`;
+}
+
+/** The learned background level, with what it means for playing. */
+function fmtNoise(v: number | null | undefined) {
+  if (v === null || v === undefined) return "–";
+  return `${v.toFixed(3)} ${v < 0.002 ? "(quiet)" : v < 0.004 ? "(fine)" : "(noisy: soft notes may be missed)"}`;
 }
 
 export default function InputTest() {
@@ -120,8 +126,8 @@ export default function InputTest() {
           {selfTest?.running ? `Self-test running… ${selfTest.secondsLeft ?? ""}s` : "Run self-test (synthetic guitar)"}
         </button>
         <span className="muted small">
-          mic: <b>{status}</b> {error && <span className="error">{error}</span>} · echo cancellation, noise suppression and auto-gain are off · use
-          headphones so the game music doesn&apos;t leak into the mic
+          mic: <b>{status}</b> {error && <span className="error">{error}</span>} · the browser&apos;s echo cancellation, noise suppression and auto-gain
+          are off (they&apos;re made for voices and dull a guitar) · the game filters voices, clicks and its own music itself
         </span>
       </section>
 
@@ -166,6 +172,15 @@ export default function InputTest() {
             </tbody>
           </table>
           <p className="muted small">Target: under 100 ms from pluck to on-screen reaction.</p>
+          <div className="muted small">listening only to your guitar</div>
+          <table className="it-lat">
+            <tbody>
+              <tr><td>background noise</td><td>{fmtNoise(diag?.noiseFloor)}</td></tr>
+              <tr><td>ignored: not a guitar (voices, clicks…)</td><td>{diag?.ignored ?? "–"}</td></tr>
+              <tr><td>game sound reaching the mic</td><td>{diag?.echo.coupling == null ? "– (measured in the game)" : `${Math.round(diag.echo.coupling * 100)}%`}</td></tr>
+              <tr><td>ignored: the game&apos;s own sound</td><td>{diag?.echo.echoes ?? "–"}</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 

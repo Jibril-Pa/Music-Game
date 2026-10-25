@@ -1,7 +1,6 @@
 /** Event names on the EventBus, and their payloads. */
 
 import type { Grade } from "@/lib/combat/rhythm";
-import type { ComboProgress, MoveId } from "@/lib/combat/combos";
 import type { NoteEvent } from "@/lib/input/types";
 
 export const EV = {
@@ -9,8 +8,6 @@ export const EV = {
   sceneReady: "current-scene-ready",
   hud: "hud",
   heard: "heard",
-  comboProgress: "combo-progress",
-  moveUsed: "move-used",
   beat: "beat",
   bossIntro: "boss-intro",
   bossLoading: "boss-loading",
@@ -32,39 +29,43 @@ export interface HudState {
   heroHp: number;
   heroMaxHp: number;
   magic: number; // 0..100
-  combo: number; // hit counter
-  shield: boolean;
+  combo: number; // hit streak
+  /** Symbol that casts the super when the meter is full ("E" chord / "C" note). */
+  superSymbol: string;
   enemy?: { name: string; hp: number; maxHp: number } | null;
   boss?: { name: string; hp: number; maxHp: number; phase: string } | null;
   objective?: string;
+  /** Level progress 0..1 (auto-scroller)... */
+  progress?: number;
+  /** ...and the icon at the end of that path. */
+  goalIcon?: string;
+  /** Chords (or notes) wanted right now, nearest foe first: shown as shapes at the bottom. */
+  wanted?: { symbol: string; role: "foe" | "heal" | "super" }[];
+  playMode?: "chords" | "notes";
 }
 
 export interface HeardEntry {
   ev: NoteEvent;
   grade: Grade | null;
-  /** "Lute Strike", "Parry!", ... */
+  /** "Slew a wolf", "Parry!", "no match", ... */
   result: string;
-  special: boolean;
+  /** Did it hit something? */
+  hit: boolean;
 }
-
-export interface MoveUsed {
-  id: MoveId;
-  name: string;
-  grade: Grade | null;
-}
-
-export type { ComboProgress };
 
 export interface GameOverInfo {
   victory: boolean;
   stats: GameStats;
   scene: string;
+  /** Index into LEVELS of the level that just ended. */
+  level: number;
 }
 
 export interface GameStats {
   notesHeard: number;
   perfects: number;
-  specials: number;
+  slain: number;
+  misses: number;
   parries: number;
   parryAttempts: number;
   maxCombo: number;

@@ -5,9 +5,10 @@
  */
 
 import type Phaser from "phaser";
+import { LW, OUT, arcStroke, circle, ellipse, hills, line, make, poly, pts, rrect, star, stick, type G } from "./art-kit";
+import { buildWorldTextures } from "./art-worlds";
 
-export const OUT = 0x2b1a12;
-const LW = 5;
+export { OUT };
 export const PALETTE = {
   skyTop: 0xf9d9a6,
   skyBottom: 0xbfe0e0,
@@ -22,48 +23,6 @@ export const PALETTE = {
   cream: 0xf6e7c1,
   red: 0xc8553d,
 };
-
-type G = Phaser.GameObjects.Graphics;
-type P = { x: number; y: number };
-const pts = (...xy: number[]): P[] => {
-  const out: P[] = [];
-  for (let i = 0; i < xy.length; i += 2) out.push({ x: xy[i], y: xy[i + 1] });
-  return out;
-};
-
-function make(scene: Phaser.Scene, key: string, w: number, h: number, draw: (g: G) => void) {
-  if (scene.textures.exists(key)) return;
-  const g = scene.make.graphics({ x: 0, y: 0 }, false);
-  draw(g);
-  g.generateTexture(key, w, h);
-  g.destroy();
-}
-
-// Outlined primitives -----------------------------------------------------------
-function circle(g: G, x: number, y: number, r: number, fill: number, lw = LW) {
-  g.fillStyle(fill, 1).fillCircle(x, y, r);
-  if (lw) g.lineStyle(lw, OUT, 1).strokeCircle(x, y, r);
-}
-function ellipse(g: G, x: number, y: number, w: number, h: number, fill: number, lw = LW) {
-  g.fillStyle(fill, 1).fillEllipse(x, y, w, h);
-  if (lw) g.lineStyle(lw, OUT, 1).strokeEllipse(x, y, w, h);
-}
-function rrect(g: G, x: number, y: number, w: number, h: number, r: number, fill: number, lw = LW) {
-  g.fillStyle(fill, 1).fillRoundedRect(x, y, w, h, r);
-  if (lw) g.lineStyle(lw, OUT, 1).strokeRoundedRect(x, y, w, h, r);
-}
-function poly(g: G, p: P[], fill: number, lw = LW) {
-  g.fillStyle(fill, 1).fillPoints(p, true);
-  if (lw) g.lineStyle(lw, OUT, 1).strokePoints(p, true, true);
-}
-function line(g: G, x1: number, y1: number, x2: number, y2: number, w: number, color = OUT) {
-  g.lineStyle(w, color, 1).lineBetween(x1, y1, x2, y2);
-}
-/** Thick stroke with an outline (necks, sticks, brooms). */
-function stick(g: G, x1: number, y1: number, x2: number, y2: number, w: number, fill: number) {
-  line(g, x1, y1, x2, y2, w + LW * 2);
-  line(g, x1, y1, x2, y2, w, fill);
-}
 
 // ------------------------------------------------------------------- hero
 function hero(g: G, pose: "idle" | "walk" | "attack" | "hurt") {
@@ -116,21 +75,55 @@ function hero(g: G, pose: "idle" | "walk" | "attack" | "hurt") {
 }
 
 // ------------------------------------------------------------------- enemies
-function wolf(g: G, open = false) {
-  poly(g, pts(12, 40, 30, 46, 34, 58, 8, 60, 2, 50), 0x5d6a7e); // tail
-  stick(g, 34, 60, 30, 84, 9, 0x4d586a);
-  stick(g, 48, 62, 50, 84, 9, 0x5d6a7e);
-  stick(g, 80, 62, 82, 84, 9, 0x4d586a);
-  stick(g, 94, 60, 96, 84, 9, 0x5d6a7e);
-  ellipse(g, 62, 52, 84, 42, 0x6f7d92);
-  ellipse(g, 66, 62, 48, 14, 0x9aa6b8, 0);
-  poly(g, pts(90, 24, 96, 4, 104, 22), 0x5d6a7e, 4);
-  poly(g, pts(102, 24, 114, 8, 114, 28), 0x5d6a7e, 4);
-  circle(g, 102, 38, 20, 0x6f7d92);
-  poly(g, open ? pts(110, 30, 134, 32, 126, 40, 112, 44, 132, 50, 110, 52) : pts(110, 30, 134, 38, 112, 50), 0x7f8ca0, 4);
+export interface WolfLook {
+  dark: number;
+  mid: number;
+  body: number;
+  light: number;
+  snout: number;
+  eye: number;
+  /** Jackal: tall ears. */
+  bigEars?: boolean;
+  /** Robot: antenna, bolts, glowing tail light. */
+  robot?: boolean;
+}
+
+export const WOLF_LOOKS: Record<"forest" | "jackal" | "robot", WolfLook> = {
+  forest: { dark: 0x4d586a, mid: 0x5d6a7e, body: 0x6f7d92, light: 0x9aa6b8, snout: 0x7f8ca0, eye: 0xffd34d },
+  jackal: { dark: 0x9a6a32, mid: 0xb07a3a, body: 0xc9934f, light: 0xead2a0, snout: 0xd6a866, eye: 0xffe066, bigEars: true },
+  robot: { dark: 0x5c6675, mid: 0x77818f, body: 0x9aa5b3, light: 0xd2dae3, snout: 0xb3bdc9, eye: 0x4ef0ff, robot: true },
+};
+
+function wolf(g: G, open = false, look: WolfLook = WOLF_LOOKS.forest) {
+  g.translateCanvas(0, 6); // room for tall ears
+  poly(g, pts(12, 40, 30, 46, 34, 58, 8, 60, 2, 50), look.mid); // tail
+  if (look.robot) circle(g, 6, 50, 5, 0xff4d5e, 3);
+  stick(g, 34, 60, 30, 84, 9, look.dark);
+  stick(g, 48, 62, 50, 84, 9, look.mid);
+  stick(g, 80, 62, 82, 84, 9, look.dark);
+  stick(g, 94, 60, 96, 84, 9, look.mid);
+  ellipse(g, 62, 52, 84, 42, look.body);
+  ellipse(g, 66, 62, 48, 14, look.light, 0);
+  if (look.robot) {
+    line(g, 40, 40, 84, 40, 3, look.dark);
+    for (const x of [44, 62, 80]) g.fillStyle(OUT, 1).fillCircle(x, 50, 2.5);
+  }
+  if (look.bigEars) {
+    poly(g, pts(88, 26, 94, -4, 106, 22), look.mid, 4);
+    poly(g, pts(102, 24, 118, -2, 116, 28), look.mid, 4);
+  } else {
+    poly(g, pts(90, 24, 96, 4, 104, 22), look.mid, 4);
+    poly(g, pts(102, 24, 114, 8, 114, 28), look.mid, 4);
+  }
+  circle(g, 102, 38, 20, look.body);
+  poly(g, open ? pts(110, 30, 134, 32, 126, 40, 112, 44, 132, 50, 110, 52) : pts(110, 30, 134, 38, 112, 50), look.snout, 4);
   circle(g, 131, 37, 4, OUT, 0);
-  circle(g, 104, 33, 5, 0xffd34d, 3);
+  circle(g, 104, 33, 5, look.eye, 3);
   g.fillStyle(OUT, 1).fillCircle(106, 33, 2);
+  if (look.robot) {
+    line(g, 96, 20, 92, 4, 3);
+    circle(g, 92, 3, 3.5, 0xff4d5e, 2);
+  }
 }
 
 function goblin(g: G) {
@@ -186,23 +179,51 @@ function witch(g: G) {
   circle(g, 80, 84, 9, 0xff7eb6, 3); // candy in hand
 }
 
-function bigWolf(g: G, pose: "idle" | "huff" | "hurt") {
-  const fur = 0x4f5866;
-  const furLight = 0x9aa3b1;
+export type BigWolfLook = "forest" | "sand" | "mecha";
+
+const BIG_LOOKS: Record<BigWolfLook, { fur: number; light: number; pants: number; pants2: number; vest: number; eye: number }> = {
+  forest: { fur: 0x4f5866, light: 0x9aa3b1, pants: 0x6b4a2a, pants2: 0x5a3c20, vest: 0x6b4a8c, eye: 0xff3b3b },
+  sand: { fur: 0x86715a, light: 0xd9c49a, pants: 0x7a3a8a, pants2: 0x6a2f7a, vest: 0xb8342a, eye: 0xff9d2e },
+  mecha: { fur: 0x7b8797, light: 0xc9d3de, pants: 0x4b5563, pants2: 0x3e4756, vest: 0x2f3746, eye: 0x4ef0ff },
+};
+
+function bigWolf(g: G, pose: "idle" | "huff" | "hurt", variant: BigWolfLook = "forest") {
+  const L = BIG_LOOKS[variant];
+  const fur = L.fur;
+  const furLight = L.light;
+  if (variant === "mecha") {
+    // jet pack behind his back
+    rrect(g, 52, 120, 30, 86, 10, 0x5c6675);
+    rrect(g, 70, 112, 30, 92, 10, 0x77818f);
+    poly(g, pts(56, 206, 78, 206, 67, 240), 0xffb35c, 3);
+    poly(g, pts(74, 204, 96, 204, 85, 236), 0x7ff3ff, 3);
+  }
   // tail
   poly(g, pts(40, 200, 10, 170, 2, 200, 30, 230), fur);
   // legs + trousers
-  stick(g, 104, 240, 96, 300, 24, 0x6b4a2a);
-  stick(g, 160, 240, 170, 300, 24, 0x5a3c20);
+  stick(g, 104, 240, 96, 300, 24, L.pants);
+  stick(g, 160, 240, 170, 300, 24, L.pants2);
   poly(g, pts(84, 296, 116, 296, 120, 314, 74, 314), fur, 4);
   poly(g, pts(156, 296, 190, 296, 196, 314, 152, 314), fur, 4);
-  poly(g, pts(84, 230, 186, 230, 180, 262, 90, 262), 0x6b4a2a, 4);
+  poly(g, pts(84, 230, 186, 230, 180, 262, 90, 262), L.pants, 4);
   // torso + vest
   ellipse(g, 134, 182, 130, 140, fur);
   ellipse(g, 144, 186, 70, 96, furLight, 0);
-  poly(g, pts(82, 130, 112, 120, 112, 236, 86, 230), 0x6b4a8c, 4);
-  poly(g, pts(184, 130, 160, 120, 162, 236, 186, 228), 0x6b4a8c, 4);
-  g.fillStyle(0xf2c14e, 1).fillCircle(170, 160, 4).fillCircle(170, 190, 4);
+  poly(g, pts(82, 130, 112, 120, 112, 236, 86, 230), L.vest, 4);
+  poly(g, pts(184, 130, 160, 120, 162, 236, 186, 228), L.vest, 4);
+  if (variant === "mecha") {
+    rrect(g, 116, 150, 52, 52, 12, 0x3e4756, 4);
+    circle(g, 142, 176, 14, 0x4ef0ff, 4);
+    g.fillStyle(0xffffff, 0.8).fillCircle(137, 171, 4);
+  } else {
+    g.fillStyle(0xf2c14e, 1).fillCircle(170, 160, 4).fillCircle(170, 190, 4);
+  }
+  if (variant === "sand") {
+    line(g, 84, 136, 110, 128, 3, 0xf2c14e);
+    line(g, 162, 128, 184, 136, 3, 0xf2c14e);
+    g.fillStyle(0xf2c14e, 1).fillRect(88, 226, 96, 8); // sash
+    arcStroke(g, 92, 262, 30, 2.0, 3.3, 6, 0xdfe6ee); // scimitar at his belt
+  }
   // arms
   if (pose === "huff") {
     stick(g, 100, 150, 70, 110, 22, fur);
@@ -214,7 +235,7 @@ function bigWolf(g: G, pose: "idle" | "huff" | "hurt") {
   // head
   poly(g, pts(110, 66, 118, 22, 136, 58), fur); // ears
   poly(g, pts(146, 58, 168, 18, 172, 64), fur);
-  poly(g, pts(124, 30, 128, 50, 120, 50), 0xd98c8c, 0);
+  poly(g, pts(124, 30, 128, 50, 120, 50), variant === "mecha" ? 0x4ef0ff : 0xd98c8c, 0);
   circle(g, 146, 86, 46, fur);
   if (pose === "huff") {
     ellipse(g, 206, 94, 70, 46, furLight); // puffed cheeks + snout
@@ -226,9 +247,22 @@ function bigWolf(g: G, pose: "idle" | "huff" | "hurt") {
     g.fillStyle(0xffffff, 1).fillTriangle(196, 104, 202, 104, 199, 112).fillTriangle(214, 103, 220, 103, 217, 111).fillTriangle(204, 118, 210, 118, 207, 111);
     circle(g, 248, 90, 8, OUT, 0);
   }
-  circle(g, 160, 74, 9, pose === "hurt" ? 0xffffff : 0xff3b3b, 3);
+  if (variant === "mecha") rrect(g, 138, 62, 46, 22, 8, 0x1b2230, 4); // visor
+  circle(g, 160, 74, 9, pose === "hurt" ? 0xffffff : L.eye, 3);
   g.fillStyle(OUT, 1).fillCircle(163, 74, 3.5);
-  line(g, 146, 60, 172, 64, 5); // brow
+  if (variant !== "mecha") line(g, 146, 60, 172, 64, 5); // brow
+  if (variant === "sand") {
+    // turban with a jewel, ears poking out
+    ellipse(g, 144, 52, 76, 30, 0xf2ece0);
+    ellipse(g, 140, 42, 54, 20, 0xe4ddcc, 3);
+    circle(g, 150, 50, 7, 0x3fb6a8, 3);
+    poly(g, pts(150, 44, 156, 24, 162, 44), 0xc0392b, 3); // feather
+  }
+  if (variant === "mecha") {
+    line(g, 118, 24, 112, 6, 3);
+    circle(g, 112, 5, 4, 0xff4d5e, 2);
+    for (const [x, y] of [[124, 112], [168, 108], [104, 160]]) g.fillStyle(OUT, 1).fillCircle(x, y, 3);
+  }
 }
 
 // ------------------------------------------------------------------- scenery
@@ -277,15 +311,6 @@ function ground(g: G, w: number, h: number) {
   for (let x = 0; x <= w; x += 32) g.arc(x + 16, 26, 14, 0, Math.PI, false);
   g.strokePath();
   g.lineStyle(LW, OUT, 1).lineBetween(0, 1, w, 1);
-}
-
-function hills(g: G, w: number, h: number, color: number, amp: number, base: number, waves: number) {
-  g.fillStyle(color, 1).beginPath().moveTo(0, h);
-  for (let x = 0; x <= w; x += 8) {
-    const y = base - amp * (0.6 * Math.sin((x / w) * Math.PI * 2 * waves) + 0.4 * Math.sin((x / w) * Math.PI * 2 * waves * 2 + 1));
-    g.lineTo(x, y);
-  }
-  g.lineTo(w, h).closePath().fillPath();
 }
 
 function forestSilhouette(g: G, w: number, h: number, color: number, step: number, top: number) {
@@ -355,30 +380,25 @@ function pigHouse(g: G, kind: "straw" | "sticks" | "bricks") {
   rrect(g, 50, 140, 40, 34, 6, 0xffe9a8);
 }
 
-// ------------------------------------------------------------------- fx
-function star(g: G, cx: number, cy: number, r: number, color: number) {
-  const p: P[] = [];
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
-    const rr = i % 2 === 0 ? r : r * 0.32;
-    p.push({ x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr });
-  }
-  g.fillStyle(color, 1).fillPoints(p, true);
-}
-
 export function buildTextures(scene: Phaser.Scene) {
   make(scene, "hero", 110, 140, (g) => hero(g, "idle"));
   make(scene, "hero_walk", 110, 140, (g) => hero(g, "walk"));
   make(scene, "hero_attack", 116, 140, (g) => hero(g, "attack"));
-  make(scene, "wolf", 140, 92, (g) => wolf(g));
-  make(scene, "wolf_bite", 140, 92, (g) => wolf(g, true));
+  make(scene, "wolf", 140, 98, (g) => wolf(g));
+  make(scene, "wolf_bite", 140, 98, (g) => wolf(g, true));
+  make(scene, "jackal", 140, 98, (g) => wolf(g, false, WOLF_LOOKS.jackal));
+  make(scene, "jackal_bite", 140, 98, (g) => wolf(g, true, WOLF_LOOKS.jackal));
+  make(scene, "robopup", 140, 98, (g) => wolf(g, false, WOLF_LOOKS.robot));
+  make(scene, "robopup_bite", 140, 98, (g) => wolf(g, true, WOLF_LOOKS.robot));
   make(scene, "goblin", 96, 100, goblin);
   make(scene, "troll", 190, 192, (g) => troll(g));
   make(scene, "troll_raise", 190, 192, (g) => troll(g, true));
   make(scene, "witch", 100, 144, witch);
-  make(scene, "bigwolf", 260, 320, (g) => bigWolf(g, "idle"));
-  make(scene, "bigwolf_huff", 260, 320, (g) => bigWolf(g, "huff"));
-  make(scene, "bigwolf_hurt", 260, 320, (g) => bigWolf(g, "hurt"));
+  for (const [key, look] of [["bigwolf", "forest"], ["sandwolf", "sand"], ["mechawolf", "mecha"]] as const) {
+    make(scene, key, 260, 320, (g) => bigWolf(g, "idle", look));
+    make(scene, `${key}_huff`, 260, 320, (g) => bigWolf(g, "huff", look));
+    make(scene, `${key}_hurt`, 260, 320, (g) => bigWolf(g, "hurt", look));
+  }
 
   make(scene, "tree", 230, 302, tree);
   make(scene, "pine", 160, 302, pine);
@@ -433,6 +453,20 @@ export function buildTextures(scene: Phaser.Scene) {
   make(scene, "heart", 32, 30, (g) => {
     g.fillStyle(0xff5f7e, 1).fillCircle(10, 10, 9).fillCircle(22, 10, 9).fillTriangle(2, 13, 30, 13, 16, 28);
   });
+  make(scene, "fairy", 90, 110, (g) => {
+    // wings
+    g.fillStyle(0xd9f6ff, 0.85).fillEllipse(24, 40, 36, 52).fillEllipse(66, 40, 36, 52);
+    g.lineStyle(3, OUT, 0.6).strokeEllipse(24, 40, 36, 52).strokeEllipse(66, 40, 36, 52);
+    // dress + head
+    poly(g, pts(45, 44, 64, 92, 26, 92), 0xff9fd0, 4);
+    circle(g, 45, 34, 13, 0xf2c49b, 4);
+    g.fillStyle(0xd9d9d9, 1).fillEllipse(45, 24, 28, 12);
+    g.fillStyle(OUT, 1).fillCircle(49, 33, 2);
+    // wand with a star
+    stick(g, 60, 62, 80, 30, 3, 0xf6e7c1);
+    star(g, 80, 26, 10, 0xffe066);
+  });
+  buildWorldTextures(scene);
   make(scene, "campfire", 140, 120, (g) => {
     stick(g, 20, 104, 120, 90, 10, 0x6b4226);
     stick(g, 20, 90, 120, 104, 10, 0x7a4a26);

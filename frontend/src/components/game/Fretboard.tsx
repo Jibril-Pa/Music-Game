@@ -1,4 +1,4 @@
-import type { Fingering } from "@/lib/combat/combos";
+import type { Fingering } from "@/lib/combat/spells";
 
 const STRING_NAMES = ["e", "B", "G", "D", "A", "E"]; // string 1 (top) .. 6
 

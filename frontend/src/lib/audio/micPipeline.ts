@@ -13,7 +13,12 @@ const WORKLET_URL = "/worklets/frame-processor.js";
 const WORKLET_NAME = "frame-processor";
 
 export type AudioSource =
-  | { kind: "mic"; deviceId?: string }
+  | {
+      kind: "mic";
+      deviceId?: string;
+      /** The browser's echo cancellation: for laptop speakers without headphones. Off by default (it can dull a guitar). */
+      echoCancellation?: boolean;
+    }
   /** Test tone (dev). */
   | { kind: "oscillator"; frequency: number; type?: OscillatorType }
   /** Pre-rendered audio, e.g. a synthesized strum (dev). Loops by default. */
@@ -94,7 +99,7 @@ function micError(err: unknown): PipelineError {
   }
 }
 
-async function getMicStream(deviceId?: string): Promise<MediaStream> {
+async function getMicStream(deviceId?: string, echoCancellation = false): Promise<MediaStream> {
   if (typeof window !== "undefined" && !window.isSecureContext) {
     throw new PipelineError("insecure-context", "The microphone needs HTTPS (or localhost).");
   }
@@ -105,7 +110,9 @@ async function getMicStream(deviceId?: string): Promise<MediaStream> {
     return await navigator.mediaDevices.getUserMedia({
       audio: {
         // Browser defaults are tuned for speech and distort instrument audio.
-        echoCancellation: false,
+        // Echo cancellation is optional (laptop-speaker mode); noise
+        // suppression would eat sustained guitar notes, so it stays off.
+        echoCancellation,
         noiseSuppression: false,
         autoGainControl: false,
         ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
@@ -136,7 +143,7 @@ export async function startPipeline(options: PipelineOptions): Promise<AudioPipe
   try {
     // Ask for the mic first: on iOS, opening the mic can change the hardware
     // sample rate, so the AudioContext is created afterwards.
-    if (source.kind === "mic") stream = await getMicStream(source.deviceId);
+    if (source.kind === "mic") stream = await getMicStream(source.deviceId, source.echoCancellation);
 
     ctx = new AudioContext({ latencyHint: "interactive" });
     if (ctx.state === "suspended") await ctx.resume();

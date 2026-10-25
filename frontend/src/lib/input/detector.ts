@@ -18,6 +18,16 @@
  *     runner-up.
  *  4. While a single note rings, a confident change of pitch class for a few
  *     hops (hammer-on / slide) is also a new note.
+ *
+ * Guitar-only gate (voices, clicks, fans, music leaking from speakers):
+ *  - pitch must hold steady (speech glides; a plucked string doesn't),
+ *  - the level must reach its peak fast and not keep swelling (voices swell),
+ *  - the sound must still be ringing when we decide (clicks vanish at once),
+ *  - onsets must stand clearly above the background noise floor, learned
+ *    while you're not playing,
+ *  - hearing the note/chord that was already ringing again needs a clear
+ *    jump in level (a re-pluck), not just a sound on top of it,
+ *  - after a few notes, sounds much quieter than your own playing are ignored.
  */
 
 import { computeChroma } from "@/lib/audio/chroma";
@@ -74,6 +84,32 @@ export const DETECT_CONFIG = {
   maxHz: 1100,
   /** Hops of silence before a ringing note is considered over. */
   releaseHops: 6,
+
+  // ---- guitar-only gate
+  /** A note's agreeing readings must also be this close in pitch (cents). */
+  maxPitchSpreadCents: 25,
+  /** The level must reach 80% of its peak this soon after the onset (a pluck is fast)... */
+  noteAttackHops: 3,
+  /** ...a strum spreads over a few strings. */
+  chordAttackHops: 6,
+  /** Don't decide while the level is still climbing by more than this factor. */
+  swellRatio: 1.12,
+  /** At decision time the sound must still be this fraction of its peak. */
+  minSustain: 0.3,
+  /** Onsets must be this many times the background level. */
+  floorOnsetFactor: 3,
+  /** Background level = this percentile of recent quiet hops... */
+  floorPercentile: 0.2,
+  /** ...over about this many hops (~5 s), only while nothing is ringing... */
+  floorWindowHops: 450,
+  /** ...and no onset (not even a rejected one) for this long. */
+  floorQuietMs: 1500,
+  /** Re-hearing what was already ringing needs the level to jump this much. */
+  restrikeGain: 1.45,
+  /** Ignore sounds that add less than this fraction of what your recent playing added... */
+  relativeLevel: 0.3,
+  /** ...once this many notes have been heard. */
+  relativeAfter: 4,
 } as const;
 
 export type DetectConfig = typeof DETECT_CONFIG;
@@ -91,6 +127,10 @@ const CHORD_LIST = GAME_CHORD_NAMES.map((n) => GAME_CHORDS[n]);
 
 export interface Detection {
   type: "note" | "chord";
+  /** Peak level (RMS) right after the onset... */
+  peakRms?: number;
+  /** ...and how much louder that is than just before it. */
+  rise?: number;
   pitchClass: PitchClass;
   midi?: number;
   chord?: ChordName;
@@ -103,6 +143,10 @@ export interface Detection {
 
 export interface DetectorDiag {
   rms: number;
+  /** Learned background level (RMS). */
+  noiseFloor: number;
+  /** Sounds ignored as not-guitar so far (voices, clicks, swells...). */
+  ignored: number;
   hz: number | null;
   pitchConfidence: number;
   state: "idle" | "deciding" | "note" | "chord";
@@ -114,6 +158,7 @@ export interface DetectorDiag {
 interface Reading {
   pc: PitchClass;
   midi: number;
+  hz: number;
   conf: number;
 }
 
@@ -127,6 +172,22 @@ interface ChordCheck {
 export class NoteDetector {
   private prevHops: number[] = [];
   private prevHf: number[] = [];
+  /** Hop levels since the current onset. */
+  private env: number[] = [];
+  private floorRing = new Float32Array(DETECT_CONFIG.floorWindowHops);
+  private floorHfRing = new Float32Array(DETECT_CONFIG.floorWindowHops);
+  private floorIdx = 0;
+  private floorCount = 0;
+  private floorRms = 0;
+  private floorHf = 0;
+  private hopsSinceFloor = 0;
+  /** What recently accepted notes/chords added to the level (how hard the player plays). */
+  private recentAdded: number[] = [];
+  /** Level just before the current onset, and what was ringing then. */
+  private preLevel = 0;
+  private ringing: string | null = null;
+  private ringingState: "note" | "chord" | null = null;
+  private ignored = 0;
   private sustainMidi = 0;
   private lastOnset = -Infinity;
   private lastEvent = -Infinity;
@@ -151,6 +212,14 @@ export class NoteDetector {
   reset(): void {
     this.prevHops = [];
     this.prevHf = [];
+    this.env = [];
+    this.floorIdx = this.floorCount = this.hopsSinceFloor = 0;
+    this.floorRms = this.floorHf = 0;
+    this.recentAdded = [];
+    this.preLevel = 0;
+    this.ringing = null;
+    this.ringingState = null;
+    this.ignored = 0;
     this.lastOnset = this.lastEvent = -Infinity;
     this.state = "idle";
     this.readings = [];
@@ -183,11 +252,30 @@ export class NoteDetector {
     if (this.prevHops.length > 3) this.prevHops.shift();
     if (this.prevHf.length > 3) this.prevHf.shift();
 
+    // Background level, learned only while nothing has happened for a while.
+    if (this.state === "idle" && endTime - this.lastOnset >= c.floorQuietMs) {
+      this.floorRing[this.floorIdx] = hopRms;
+      this.floorHfRing[this.floorIdx] = hf;
+      this.floorIdx = (this.floorIdx + 1) % c.floorWindowHops;
+      this.floorCount = Math.min(c.floorWindowHops, this.floorCount + 1);
+      if (++this.hopsSinceFloor >= 20 && this.floorCount >= 40) {
+        this.hopsSinceFloor = 0;
+        const pct = (a: Float32Array) => {
+          const v = Array.from(a.subarray(0, this.floorCount)).sort((x, y) => x - y);
+          return v[Math.floor(v.length * c.floorPercentile)];
+        };
+        this.floorRms = pct(this.floorRing);
+        this.floorHf = pct(this.floorHfRing);
+      }
+    }
+    const onsetMinRms = Math.max(c.onsetMinRms, this.floorRms * c.floorOnsetFactor);
+    const onsetHfMin = Math.max(c.onsetHfMin, this.floorHf * c.floorOnsetFactor);
+
     let detection: Detection | null = null;
     const louder = hopRms > prev * c.onsetRatio && hopRms - prev >= c.onsetMinJump;
-    const transient = hf >= c.onsetHfMin && hf > prevHf * c.onsetHfRatio;
+    const transient = hf >= onsetHfMin && hf > prevHf * c.onsetHfRatio;
     const onset =
-      hopRms >= c.onsetMinRms &&
+      hopRms >= onsetMinRms &&
       (louder || transient) &&
       endTime - this.lastOnset >= c.debounceMs &&
       endTime - this.lastEvent >= c.debounceMs;
@@ -199,12 +287,18 @@ export class NoteDetector {
       this.preChroma = this.state === "chord" || this.state === "note"
         ? (computeChroma(frame.subarray(0, frame.length - c.hopSize), sampleRate, { minRms: c.minRms })?.chroma ?? null)
         : null;
+      this.ringingState = this.state === "note" || this.state === "chord" ? this.state : null;
+      this.ringing =
+        this.state === "note" ? (this.sustainPc ?? null) : this.state === "chord" ? (this.lastChordName ?? null) : null;
+      this.preLevel = prev;
       this.state = "deciding";
       this.readings = [];
       this.chromaSum = null;
       this.sawConfidentPitch = false;
       this.change = null;
+      this.env = [];
     }
+    if (this.state === "deciding") this.env.push(hopRms);
 
     if (hopRms < c.minRms) {
       if (++this.quietHops >= c.releaseHops && this.state !== "deciding") {
@@ -240,7 +334,7 @@ export class NoteDetector {
     if (this.state === "deciding") {
       if (hz !== null && conf >= c.noteConfidence) {
         const midi = Math.round(hzToMidi(hz));
-        this.readings.push({ pc: pitchClassOf(midi), midi, conf });
+        this.readings.push({ pc: pitchClassOf(midi), midi, hz, conf });
         this.sawConfidentPitch = true;
       }
       detection = this.decide(frame, sampleRate, endTime);
@@ -271,6 +365,8 @@ export class NoteDetector {
       detection,
       diag: {
         rms: hopRms,
+        noiseFloor: this.floorRms,
+        ignored: this.ignored,
         hz,
         pitchConfidence: conf,
         state: this.state,
@@ -329,9 +425,13 @@ export class NoteDetector {
       novelChroma = norm(avg.map((v, i) => Math.max(0, v - c.chordPreWeight * pre[i])));
       novel = this.rank(novelChroma);
     }
+    // A clear, different chord in the plain reading wins. Only when the plain
+    // reading is still the previous chord (strings ringing on) or unclear,
+    // trust what's new since the onset.
     let pick = plain;
     let shown: Float32Array = avg;
-    if (!(plain.ok && plain.name === this.lastChordName) && novel?.ok) {
+    const plainIsNew = plain.ok && plain.name !== this.lastChordName;
+    if (!plainIsNew && novel?.ok) {
       pick = novel;
       shown = novelChroma!;
     }
@@ -347,39 +447,119 @@ export class NoteDetector {
     if (r.length < c.stableReadings) return null;
     const last = r.slice(-c.stableReadings);
     if (!last.every((x) => x.pc === last[0].pc)) return null;
+    // Steady pitch, in cents: speech and sirens glide, strings don't.
+    const hzs = last.map((x) => x.hz);
+    if (1200 * Math.log2(Math.max(...hzs) / Math.min(...hzs)) > c.maxPitchSpreadCents) return null;
     const conf = last.reduce((s, x) => s + x.conf, 0) / last.length;
     if (conf < c.noteMeanConfidence) return null;
     const midis = last.map((x) => x.midi).sort((a, b) => a - b);
-    return { pc: last[0].pc, midi: midis[midis.length >> 1], conf };
+    return { pc: last[0].pc, midi: midis[midis.length >> 1], hz: hzs[0], conf };
+  }
+
+  /**
+   * Last chance at the timeout: most readings agree on one pitch class (PitchYin
+   * sometimes jumps to the fifth on a real string) and that pitch is steady.
+   * Octave jumps are fine: steadiness is measured against the nearest semitone.
+   */
+  private timeoutNote(): Reading | null {
+    const c = this.cfg;
+    const r = this.readings;
+    if (r.length < 3) return null;
+    const count = new Map<PitchClass, number>();
+    for (const x of r) count.set(x.pc, (count.get(x.pc) ?? 0) + 1);
+    const [pc, n] = [...count].sort((a, b) => b[1] - a[1])[0];
+    if (n < 0.6 * r.length) return null;
+    const mine = r.filter((x) => x.pc === pc);
+    const dev = mine.map((x) => 100 * (hzToMidi(x.hz) - x.midi));
+    if (Math.max(...dev) - Math.min(...dev) > c.maxPitchSpreadCents) return null;
+    const midis = mine.map((x) => x.midi).sort((a, b) => a - b);
+    return { pc, midi: midis[midis.length >> 1], hz: mine[0].hz, conf: mine.reduce((s, x) => s + x.conf, 0) / mine.length };
+  }
+
+  /** Shape of the sound since the onset: attack time, still swelling, still ringing. */
+  private envelope() {
+    const env = this.env;
+    const peak = env.length ? Math.max(...env) : 0;
+    const attack = env.findIndex((v) => v >= 0.8 * peak);
+    const last = env[env.length - 1] ?? 0;
+    const swelling = env.length >= 3 && last > this.cfg.swellRatio * Math.max(...env.slice(0, -1));
+    return { peak, attack, swelling, sustained: last >= this.cfg.minSustain * peak };
+  }
+
+  /** Hard enough compared to how the player has been playing? */
+  private loudEnough(added: number): boolean {
+    const c = this.cfg;
+    if (this.recentAdded.length < c.relativeAfter) return true;
+    const sorted = [...this.recentAdded].sort((a, b) => a - b);
+    return added >= c.relativeLevel * sorted[sorted.length >> 1];
+  }
+
+  /** Not a guitar event: go back to whatever was ringing before it. */
+  private drop(why: string) {
+    this.debug?.(`  dropped: ${why}`);
+    this.ignored++;
+    this.state = this.ringing && this.quietHops < this.cfg.releaseHops ? this.ringingState! : "idle";
   }
 
   private decide(frame: Float32Array, sampleRate: number, endTime: number): Detection | null {
     const c = this.cfg;
     const elapsed = endTime - this.onsetTime;
-    const note = this.noteCandidate();
+    const env = this.envelope();
+    // Still swelling (a voice, a bowed note...): wait and see.
+    const waiting = env.swelling && elapsed < c.decisionTimeoutMs;
+    const note = waiting ? null : this.noteCandidate();
 
     let d: Detection | null = null;
     if (note) {
+      if (env.attack > c.noteAttackHops) return this.reject("slow attack (not a pluck)", endTime);
+      if (!env.sustained) return this.reject("didn't ring on (click/tap)", endTime);
       d = { type: "note", pitchClass: note.pc, midi: note.midi, onsetTime: this.onsetTime, confidence: note.conf };
-    } else if (elapsed >= c.chordCheckMs && !this.sawConfidentPitch) {
+    } else if (!waiting && elapsed >= c.chordCheckMs && !this.sawConfidentPitch) {
       // Several strings ringing: PitchYin never got sure of one pitch.
       const chord = this.checkChord(frame, sampleRate);
       if (chord?.ok) {
+        if (env.attack > c.chordAttackHops) return this.reject("slow attack (not a strum)", endTime);
+        if (!env.sustained) return this.reject("didn't ring on (click/tap)", endTime);
         d = { type: "chord", pitchClass: pitchClassOf(GAME_CHORDS[chord.name].root), chord: chord.name, onsetTime: this.onsetTime, confidence: chord.score };
       }
     }
     if (!d && elapsed >= c.decisionTimeoutMs) {
-      if (this.readings.length) {
-        // Most common pitch class among the confident readings.
-        const counts = new Map<PitchClass, Reading[]>();
-        for (const r of this.readings) counts.set(r.pc, [...(counts.get(r.pc) ?? []), r]);
-        const [pc, rs] = [...counts.entries()].sort((a, b) => b[1].length - a[1].length)[0];
-        d = { type: "note", pitchClass: pc, midi: rs[0].midi, onsetTime: this.onsetTime, confidence: rs[0].conf };
+      const late = env.swelling ? null : this.timeoutNote();
+      if (late && env.attack <= c.noteAttackHops && env.sustained) {
+        d = { type: "note", pitchClass: late.pc, midi: late.midi, onsetTime: this.onsetTime, confidence: late.conf, via: "timeout" };
       } else {
-        this.state = "idle"; // nothing clear enough: drop this onset rather than guess
+        // No clean note or chord in time: drop it rather than guess.
+        this.drop(env.swelling ? "kept swelling (voice?)" : this.readings.length ? "pitch never steady" : "no pitch, no chord");
+        return null;
       }
     }
-    if (d) this.emitted(d, endTime);
+    if (!d) return null;
+    const rise = env.peak - this.preLevel;
+    const gain = env.peak / Math.max(this.preLevel, c.minRms);
+    // RMS of what this sound added on top of what was ringing (powers add, so
+    // a soft strum over a loud ringing chord still counts for what it adds).
+    const added = Math.sqrt(Math.max(0, env.peak * env.peak - this.preLevel * this.preLevel));
+    const what = d.chord ?? d.pitchClass;
+    this.debug?.(`  ${what}: peak ${env.peak.toFixed(3)} pre ${this.preLevel.toFixed(3)} gain ${gain.toFixed(2)} attack ${env.attack} ringing ${this.ringing}`);
+    if (what === this.ringing && gain < c.restrikeGain) return this.reject("same as what was ringing, no re-pluck", endTime);
+    if (!this.loudEnough(added)) return this.reject("much quieter than your playing", endTime);
+    d.peakRms = env.peak;
+    d.rise = rise;
+    this.recentAdded.push(added);
+    if (this.recentAdded.length > 8) this.recentAdded.shift();
+    this.emitted(d, endTime);
     return d;
+  }
+
+  /** The last event turned out not to be the player (e.g. the game's own sound): don't learn from it. */
+  retract(): void {
+    this.recentAdded.pop();
+  }
+
+  private reject(why: string, endTime: number): null {
+    this.drop(why);
+    // Stay deaf to the rest of this sound, like after a real event.
+    this.lastEvent = endTime;
+    return null;
   }
 }

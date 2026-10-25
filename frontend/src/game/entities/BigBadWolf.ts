@@ -1,11 +1,13 @@
 import Phaser from "phaser";
 import { GROUND_Y, flashSprite } from "../fx";
-import type { Hittable } from "../scenes/FightScene";
 
 export type WolfState = "idle" | "retreat" | "stalk" | "windup" | "recover" | "huff" | "blow" | "stagger" | "defeated";
 
-/** The first boss. Not physics-driven: the scene moves him with tweens and AI. */
-export class BigBadWolf extends Phaser.GameObjects.Sprite implements Hittable {
+/**
+ * The boss of every world: the Big Bad Wolf (in his desert and mecha forms
+ * later on). Not physics-driven: the scene moves him with tweens and AI.
+ */
+export class BigBadWolf extends Phaser.GameObjects.Sprite {
   readonly maxHp: number;
   hp: number;
   state: WolfState = "idle";
@@ -15,8 +17,12 @@ export class BigBadWolf extends Phaser.GameObjects.Sprite implements Hittable {
   readonly hitHalfWidth = 95;
   readonly hitHeight = 270;
 
-  constructor(scene: Phaser.Scene, x: number, hp: number) {
-    super(scene, x, GROUND_Y, "bigwolf");
+  /** Texture prefix: "bigwolf", "sandwolf", "mechawolf". */
+  readonly look: string;
+
+  constructor(scene: Phaser.Scene, x: number, hp: number, look = "bigwolf") {
+    super(scene, x, GROUND_Y, look);
+    this.look = look;
     this.maxHp = this.hp = hp;
     scene.add.existing(this);
     this.setOrigin(0.5, 1).setDepth(16).setFlipX(true);
@@ -28,6 +34,11 @@ export class BigBadWolf extends Phaser.GameObjects.Sprite implements Hittable {
   }
 
   /** Mouth position (attacks come from here). */
+  /** Show a pose: "" (idle), "huff" or "hurt". */
+  pose(p: "" | "huff" | "hurt") {
+    this.setTexture(p ? `${this.look}_${p}` : this.look);
+  }
+
   get mouth(): { x: number; y: number } {
     return { x: this.x + (this.flipX ? -110 : 110), y: this.y - 220 };
   }
@@ -41,7 +52,7 @@ export class BigBadWolf extends Phaser.GameObjects.Sprite implements Hittable {
     if (amount >= 30 && this.state !== "huff" && this.state !== "blow") {
       this.state = "stagger";
       this.stateUntil = now + 380;
-      this.setTexture("bigwolf_hurt");
+      this.setTexture(`${this.look}_hurt`);
     }
     return this.hp <= 0;
   }

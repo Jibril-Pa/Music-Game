@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { Boot } from "./scenes/Boot";
 import { Boss } from "./scenes/Boss";
 import { End } from "./scenes/End";
-import { Level1 } from "./scenes/Level1";
+import { Journey } from "./scenes/Journey";
 import { Title } from "./scenes/Title";
 import { Tune } from "./scenes/Tune";
 
@@ -20,7 +20,10 @@ const config: Phaser.Types.Core.GameConfig = {
   render: { antialias: true, roundPixels: false },
   // Keyboard notes (Z X C V B, 1-4) are read by NoteInput on window; let them through.
   input: { keyboard: { capture: [] } },
-  scene: [Boot, Title, Tune, Level1, Boss, End],
+  // All sound is our own Web Audio (lib/game-audio); Phaser's sound manager
+  // would open a second AudioContext for nothing.
+  audio: { noAudio: true },
+  scene: [Boot, Title, Tune, Journey, Boss, End],
 };
 
 export default function StartGame(parent: string) {

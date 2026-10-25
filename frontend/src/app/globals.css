@@ -1129,3 +1129,239 @@ button[type="submit"] {
 }
 
 /* input test page also uses .meter / .meter-fill (see above) */
+
+/* ---------- chord-to-slay redesign ---------- */
+.mode-toggle {
+  display: inline-flex;
+  gap: 0;
+  margin-bottom: 0.7em;
+  border: 3px solid #2b1a12;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 3px 0 #2b1a12;
+}
+
+.mode-btn {
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 1em;
+  color: #2b1a12;
+  background: #fff6dc;
+  border: none;
+  padding: 0.35em 1.1em;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+
+.mode-btn + .mode-btn {
+  border-left: 3px solid #2b1a12;
+}
+
+.mode-btn small {
+  font-weight: 600;
+  font-size: 0.7em;
+  opacity: 0.75;
+}
+
+.mode-btn.on {
+  background: #ffcf5c;
+}
+
+.cb-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin-bottom: 0.3em;
+}
+
+.cb-head h3 {
+  margin: 0;
+}
+
+.cb-section {
+  margin: 0.9em 0 0.4em;
+}
+
+.sb-move.heal {
+  background: #ffe9f5;
+}
+
+.sb-move.super {
+  background: #fff1b8;
+}
+
+.hud-path {
+  position: relative;
+  height: 1.1em;
+  margin-top: 0.4em;
+  background: #e3cfa3;
+  border: 3px solid #2b1a12;
+  border-radius: 999px;
+}
+
+.hud-path-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(#a8e08a, #5fa548);
+  border-radius: 999px;
+  transition: width 0.3s;
+}
+
+.hud-path-bard {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.3em;
+  transition: left 0.3s;
+}
+
+.hud-path-goal {
+  position: absolute;
+  right: -0.4em;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.3em;
+}
+
+.ear-chip.miss {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+/* chord helper: shapes of the chords needed right now */
+.chord-helper {
+  position: absolute;
+  left: 50%;
+  bottom: 2.5%;
+  transform: translateX(-38%);
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.ch-card {
+  background: rgba(246, 231, 193, 0.95);
+  border: 3px solid #2b1a12;
+  border-radius: 12px;
+  padding: 0.2em 0.45em 0.3em;
+  box-shadow: 0 3px 0 #2b1a12;
+  opacity: 0.85;
+}
+
+.ch-card.first {
+  opacity: 1;
+  border-color: #b8860b;
+  box-shadow: 0 0 0 3px #ffd25e, 0 3px 0 #2b1a12;
+}
+
+.ch-card.heal {
+  background: #ffe9f5;
+}
+
+.ch-card.super {
+  background: #fff1b8;
+}
+
+.ch-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  font-weight: 900;
+  font-size: 1.35em;
+  line-height: 1.1;
+}
+
+.ch-name em {
+  font-size: 0.55em;
+  font-style: normal;
+  color: #8a3b1c;
+}
+
+.ch-name small {
+  font-size: 0.5em;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.hud-ear {
+  max-width: 34%;
+}
+
+/* ---------- The Traveling Bard: journey map on the title ---------- */
+.journey-map {
+  display: flex;
+  gap: 0.6em;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 0 0 0.7em;
+}
+
+.jm-world {
+  background: rgba(255, 246, 220, 0.6);
+  border: 3px solid #2b1a12;
+  border-radius: 12px;
+  padding: 0.3em 0.5em 0.45em;
+}
+
+.jm-era {
+  font-weight: 800;
+  font-size: 0.78em;
+  margin-bottom: 0.25em;
+  white-space: nowrap;
+}
+
+.jm-levels {
+  display: flex;
+  gap: 0.3em;
+  justify-content: center;
+}
+
+.jm-level {
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 0.85em;
+  color: #2b1a12;
+  background: #fff6dc;
+  border: 3px solid #2b1a12;
+  border-radius: 10px;
+  padding: 0.15em 0.55em;
+  cursor: pointer;
+  box-shadow: 0 2px 0 #2b1a12;
+}
+
+.jm-level.boss {
+  background: #f3d6c2;
+}
+
+.jm-level.on {
+  background: #ffcf5c;
+  transform: translateY(-1px);
+}
+
+.jm-level:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.jm-pick {
+  margin: 0.5em 0 0;
+}
+
+.title-row {
+  display: flex;
+  gap: 0.8em;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.7em;
+}
+
+.title-row .mode-toggle,
+.title-row .journey-map {
+  margin: 0;
+}

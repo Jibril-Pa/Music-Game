@@ -8,7 +8,11 @@
  * so "on the beat" means on the beat the player hears.
  */
 
+import { LEVEL_HIGHPASS_HZ, logOutput, logOutputLevel } from "@/lib/audio/outputLog";
 import { synthesizeStrum } from "@/lib/audio/testSignals";
+import { pitchClassOf } from "@/lib/input/types";
+
+const midiOfHz = (hz: number) => 69 + 12 * Math.log2(hz / 440);
 
 export type SfxName =
   | "jab"
@@ -44,6 +48,8 @@ class GameAudio {
   private plucks = new Map<string, AudioBuffer>();
   musicVolume = 0.7;
   sfxVolume = 0.9;
+  /** Laptop-speaker mode: music quieter so the mic hears less of it. */
+  private ducked = false;
 
   /** Create/resume the context. Call from a user gesture the first time. */
   ensure(): AudioContext {
@@ -52,7 +58,8 @@ class GameAudio {
       this.master = new GainNode(this.ctx, { gain: 0.9 });
       const comp = new DynamicsCompressorNode(this.ctx, { threshold: -14, ratio: 4, attack: 0.003, release: 0.2 });
       this.master.connect(comp).connect(this.ctx.destination);
-      this.music = new GainNode(this.ctx, { gain: this.musicVolume });
+      void this.startTap(this.ctx, comp);
+      this.music = new GainNode(this.ctx, { gain: this.musicGain() });
       this.sfx = new GainNode(this.ctx, { gain: this.sfxVolume });
       this.music.connect(this.master);
       this.sfx.connect(this.master);
@@ -66,13 +73,61 @@ class GameAudio {
     return this.ctx;
   }
 
+  /**
+   * Measures the level of everything the game outputs (~every 11 ms) so the
+   * mic can tell how much of it leaks back in (see echoGuard). Bass is cut
+   * first, as on the mic side: speakers differ most in how much bass they play.
+   */
+  private async startTap(ctx: AudioContext, from: AudioNode) {
+    try {
+      await ctx.audioWorklet.addModule("/worklets/frame-processor.js");
+      if (this.ctx !== ctx) return;
+      const highpass = new BiquadFilterNode(ctx, { type: "highpass", frequency: LEVEL_HIGHPASS_HZ, Q: Math.SQRT1_2 });
+      const node = new AudioWorkletNode(ctx, "frame-processor", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        channelCount: 1,
+        channelCountMode: "explicit",
+        processorOptions: { frameSize: 512, hopSize: 512 },
+      });
+      node.port.onmessage = (e: MessageEvent<{ frame: Float32Array; end: number }>) => {
+        if (this.ctx !== ctx) return;
+        const f = e.data.frame;
+        let sum = 0;
+        for (let i = 0; i < f.length; i++) sum += f[i] * f[i];
+        logOutputLevel(this.ctxToPerf(e.data.end / ctx.sampleRate), Math.sqrt(sum / f.length));
+      };
+      from.connect(highpass).connect(node);
+      // Silent (the worklet writes nothing); connected so it keeps running.
+      node.connect(ctx.destination);
+    } catch {
+      // No worklets: the echo guard never learns a leak and ignores nothing.
+    }
+  }
+
   get ready(): boolean {
     return !!this.ctx && this.ctx.state === "running";
   }
 
   setMusicVolume(v: number) {
     this.musicVolume = v;
-    if (this.ctx) this.music.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+    if (this.ctx) this.music.gain.setTargetAtTime(this.musicGain(), this.ctx.currentTime, 0.05);
+  }
+
+  /** Turn the music down (laptop speakers, no headphones). */
+  setDucked(on: boolean) {
+    this.ducked = on;
+    this.setMusicVolume(this.musicVolume);
+  }
+
+  private musicGain() {
+    return this.musicVolume * (this.ducked ? 0.5 : 1);
+  }
+
+  /** Tell the mic what we're about to play (see outputLog). */
+  private logSound(at: number, seconds: number, pcs: readonly string[]) {
+    const heard = this.ctxToPerf(at);
+    logOutput({ at: heard, until: heard + seconds * 1000, pcs: [...new Set(pcs)] });
   }
 
   /** AudioContext time -> performance.now() ms when it is heard. */
@@ -119,7 +174,9 @@ class GameAudio {
     const src = new AudioBufferSourceNode(ctx, { buffer: this.pluckBuffer(list, list.length > 1 ? strumMs : 0, seconds) });
     const g = new GainNode(ctx, { gain });
     src.connect(g).connect(dest ?? this.sfx);
-    src.start(at ?? ctx.currentTime);
+    const t = at ?? ctx.currentTime;
+    src.start(t);
+    this.logSound(t, Math.min(seconds ?? 1.6, 1.2), list.map(pitchClassOf));
   }
 
   private noiseBurst(opts: { at?: number; dur: number; gain: number; type?: BiquadFilterType; f0: number; f1?: number; q?: number; attack?: number; dest?: AudioNode }) {
@@ -135,6 +192,7 @@ class GameAudio {
     src.connect(f).connect(g).connect(opts.dest ?? this.sfx);
     src.start(t, Math.random() * 0.5);
     src.stop(t + opts.dur + 0.05);
+    this.logSound(t, opts.dur, []);
   }
 
   private tone(opts: { at?: number; dur: number; gain: number; type?: OscillatorType; f0: number; f1?: number; attack?: number; dest?: AudioNode }) {
@@ -149,11 +207,25 @@ class GameAudio {
     o.connect(g).connect(opts.dest ?? this.sfx);
     o.start(t);
     o.stop(t + opts.dur + 0.05);
+    // A steady tone in guitar range has a pitch; a sweep doesn't hold one.
+    const pitched = !opts.f1 && opts.f0 >= 70 && opts.f0 <= 1100;
+    this.logSound(t, opts.dur, pitched ? [pitchClassOf(midiOfHz(opts.f0))] : []);
   }
 
-  /** Short percussion voices for the music. */
-  drum(kind: "kick" | "snare" | "hat" | "openhat", at: number, gain = 1, dest?: AudioNode) {
-    if (kind === "kick") {
+  /** Short percussion voices for the music (doum/tek/jingle: desert hand drums; clap: future). */
+  drum(kind: "kick" | "snare" | "hat" | "openhat" | "doum" | "tek" | "jingle" | "clap", at: number, gain = 1, dest?: AudioNode) {
+    if (kind === "doum") {
+      this.tone({ at, dur: 0.28, gain: 0.75 * gain, f0: 115, f1: 72, dest });
+      this.noiseBurst({ at, dur: 0.03, gain: 0.08 * gain, type: "lowpass", f0: 900, dest });
+    } else if (kind === "tek") {
+      this.noiseBurst({ at, dur: 0.07, gain: 0.32 * gain, type: "bandpass", f0: 3200, q: 2.5, dest });
+      this.tone({ at, dur: 0.05, gain: 0.1 * gain, f0: 430, f1: 380, dest });
+    } else if (kind === "jingle") {
+      this.noiseBurst({ at, dur: 0.09, gain: 0.08 * gain, type: "highpass", f0: 8000, dest });
+    } else if (kind === "clap") {
+      this.noiseBurst({ at, dur: 0.12, gain: 0.35 * gain, type: "bandpass", f0: 1500, q: 1.2, dest });
+      this.noiseBurst({ at: at + 0.012, dur: 0.1, gain: 0.25 * gain, type: "bandpass", f0: 1100, q: 1.2, dest });
+    } else if (kind === "kick") {
       this.tone({ at, dur: 0.32, gain: 0.9 * gain, f0: 140, f1: 42, dest });
       this.noiseBurst({ at, dur: 0.03, gain: 0.15 * gain, type: "lowpass", f0: 2000, dest });
     } else if (kind === "snare") {
@@ -162,6 +234,11 @@ class GameAudio {
     } else {
       this.noiseBurst({ at, dur: kind === "hat" ? 0.04 : 0.18, gain: 0.12 * gain, type: "highpass", f0: 7000, dest });
     }
+  }
+
+  /** Short synth note (square/saw...) for the future world's arpeggios. */
+  synth(midi: number, at: number, dur: number, gain = 0.05, type: OscillatorType = "square", dest?: AudioNode) {
+    this.tone({ at, dur, gain, type, f0: 440 * 2 ** ((midi - 69) / 12), attack: 0.005, dest: dest ?? this.music });
   }
 
   /** Soft bass note (triangle through a low-pass). */
@@ -177,6 +254,28 @@ class GameAudio {
     o.connect(f).connect(g).connect(dest ?? this.music);
     o.start(at);
     o.stop(at + dur + 0.2);
+    this.logSound(at, dur, [pitchClassOf(midi)]);
+  }
+
+  /** Warm, soft chord pad (detuned triangles, slow attack). */
+  pad(midis: number[], at: number, dur: number, gain = 0.07, dest?: AudioNode) {
+    const ctx = this.ensure();
+    const out = new GainNode(ctx, { gain: 0 });
+    out.gain.setValueAtTime(0, at);
+    out.gain.linearRampToValueAtTime(gain, at + 0.06);
+    out.gain.setTargetAtTime(gain * 0.7, at + 0.1, 0.3);
+    out.gain.setTargetAtTime(0, at + dur, 0.15);
+    const lp = new BiquadFilterNode(ctx, { type: "lowpass", frequency: 1800 });
+    out.connect(lp).connect(dest ?? this.music);
+    this.logSound(at, dur + 0.3, midis.map(pitchClassOf));
+    for (const m of midis) {
+      for (const detune of [-6, 6]) {
+        const o = new OscillatorNode(ctx, { type: "triangle", frequency: 440 * 2 ** ((m - 69) / 12), detune });
+        o.connect(out);
+        o.start(at);
+        o.stop(at + dur + 1);
+      }
+    }
   }
 
   // ------------------------------------------------------------ sound effects

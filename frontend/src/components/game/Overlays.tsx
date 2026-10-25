@@ -3,32 +3,113 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BossSongChoice, GameOverInfo } from "@/game/events";
+import { LEVELS, WORLDS, isFinalLevel, levelAt, unlockedUpTo } from "@/game/levels";
+import { session } from "@/game/state";
 import { listProcessedSongs, type JobSongInfo } from "@/lib/boss/songs";
 import { PitchSmoother, STANDARD_TUNING, centsBetween, nearestNote, nearestString } from "@/lib/audio/pitch";
 import { getNoteInput, type MicStatus } from "@/lib/input/noteInput";
+import type { PlayMode } from "@/lib/combat/spells";
 
 // ------------------------------------------------------------------ title
 
-export function TitleOverlay({ onStart, onSpellbook, mic, micError }: { onStart: (mode: "mic" | "keyboard") => void; onSpellbook: () => void; mic: MicStatus; micError?: string }) {
+/** Furthest level you can pick. Dev builds: /play?unlock opens every level (for testing). */
+function readUnlocked(): number {
+  if (typeof window === "undefined") return 0;
+  if (process.env.NODE_ENV !== "production" && window.location.search.includes("unlock")) return LEVELS.length - 1;
+  return unlockedUpTo();
+}
+
+/** Pick where the journey starts: levels you've reached are unlocked. */
+function JourneyMap({ selected, unlocked, onSelect }: { selected: number; unlocked: number; onSelect: (i: number) => void }) {
+  return (
+    <div className="journey-map" aria-label="Choose a level">
+      {(Object.keys(WORLDS) as (keyof typeof WORLDS)[]).map((w) => (
+        <div key={w} className="jm-world">
+          <div className="jm-era">
+            {WORLDS[w].emoji} {WORLDS[w].era}
+          </div>
+          <div className="jm-levels">
+            {LEVELS.map((lv, i) =>
+              lv.world !== w ? null : (
+                <button
+                  key={lv.id}
+                  className={`jm-level ${i === selected ? "on" : ""} ${lv.kind === "boss" ? "boss" : ""}`}
+                  disabled={i > unlocked}
+                  aria-pressed={i === selected}
+                  title={i > unlocked ? "Beat the level before to unlock" : lv.name}
+                  onClick={() => onSelect(i)}
+                >
+                  {i > unlocked ? "🔒" : lv.kind === "boss" ? "🐺" : ""} {lv.id}
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function TitleOverlay({
+  onStart,
+  onBook,
+  mic,
+  micError,
+  playMode,
+  onPlayMode,
+}: {
+  onStart: (mode: "mic" | "keyboard", level: number) => void;
+  onBook: () => void;
+  mic: MicStatus;
+  micError?: string;
+  playMode: PlayMode;
+  onPlayMode: (m: PlayMode) => void;
+}) {
+  // The game page only renders in the browser, so saved progress can be read right away.
+  const [unlocked] = useState(readUnlocked);
+  const [level, setLevel] = useState(readUnlocked);
+  const lv = levelAt(level);
   return (
     <div className="gm-bottom gm-raised">
       <div className="gm-panel title-panel">
+        <div className="title-row">
+          <div className="mode-toggle" role="radiogroup" aria-label="What foes ask for">
+            <button className={`mode-btn ${playMode === "chords" ? "on" : ""}`} onClick={() => onPlayMode("chords")} aria-pressed={playMode === "chords"}>
+              Chords <small>Em G D C Am</small>
+            </button>
+            <button className={`mode-btn ${playMode === "notes" ? "on" : ""}`} onClick={() => onPlayMode("notes")} aria-pressed={playMode === "notes"}>
+              Single notes <small>easier: open strings</small>
+            </button>
+          </div>
+          <JourneyMap selected={level} unlocked={unlocked} onSelect={setLevel} />
+        </div>
         <div className="title-buttons">
-          <button className="gm-btn big primary" onClick={() => onStart("mic")} disabled={mic === "starting"}>
+          <button className="gm-btn big primary" onClick={() => onStart("mic", level)} disabled={mic === "starting"}>
             {mic === "starting" ? "Opening the mic…" : "🎸 Play with my guitar"}
           </button>
-          <button className="gm-btn big" onClick={() => onStart("keyboard")}>
+          <button className="gm-btn big" onClick={() => onStart("keyboard", level)}>
             ⌨ Play with the keyboard
           </button>
-          <button className="gm-btn" onClick={onSpellbook}>
-            📖 Spellbook
+          <button className="gm-btn" onClick={onBook}>
+            📖 {playMode === "chords" ? "Chord" : "Note"} Book
           </button>
         </div>
+        <p className="jm-pick muted small">
+          Starting at <b>{lv.id}</b>: {lv.name} ({WORLDS[lv.world].era})
+        </p>
         {micError && <p className="gm-error">Couldn&apos;t use the microphone: {micError} You can still play with the keyboard.</p>}
         <p className="title-help">
-          Walk with <kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd>, jump with <kbd>Space</kbd>. Attack by <b>playing notes</b>: open strings E A D G B are
-          enough. No guitar? <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> <kbd>B</kbd> = E G A B D and <kbd>1</kbd>–<kbd>4</kbd> = Em G C D chords.{" "}
-          <kbd>Esc</kbd> pauses. <Link href="/input-test">Test your input</Link> · <Link href="/preview">Song pipeline</Link>
+          The Big Bad Wolf stole the Hourglass of Ages! Chase him through time. Every foe shows a {playMode === "chords" ? "chord" : "note"}:{" "}
+          <b>play it to slay them</b>. No guitar? {playMode === "chords" ? (
+            <>
+              keys <kbd>1</kbd>–<kbd>7</kbd> = Em G C D A Am E
+            </>
+          ) : (
+            <>
+              keys <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> <kbd>B</kbd> <kbd>N</kbd> = E G A B D C
+            </>
+          )}
+          . <kbd>Esc</kbd> pauses. <Link href="/input-test">Test your input</Link> · <Link href="/preview">Song pipeline</Link>
         </p>
       </div>
     </div>
@@ -37,7 +118,9 @@ export function TitleOverlay({ onStart, onSpellbook, mic, micError }: { onStart:
 
 // ------------------------------------------------------------------ tuner
 
-export function TuneOverlay({ onDone }: { onDone: () => void }) {
+const INTO = { forest: "Into the forest →", desert: "Into the dunes →", future: "Into the city →" } as const;
+
+export function TuneOverlay({ onDone, speakers, onSpeakers }: { onDone: () => void; speakers: boolean; onSpeakers: (on: boolean) => void }) {
   const [hz, setHz] = useState<number | null>(null);
   const [level, setLevel] = useState(0);
   const [tuned, setTuned] = useState<Set<string>>(new Set());
@@ -106,11 +189,17 @@ export function TuneOverlay({ onDone }: { onDone: () => void }) {
           </div>
         </div>
         <div className="tune-side">
-          <p>
-            Tip: wear <b>headphones</b> so the mic only hears your guitar, not the game music.
+          <label className="sb-practice">
+            <input type="checkbox" checked={speakers} onChange={(e) => onSpeakers(e.target.checked)} /> Laptop speakers (no headphones)
+          </label>
+          <p className="muted small">
+            {speakers
+              ? "The music plays quieter and the mic filters out the game's own sound. Headphones still work best."
+              : "Headphones work best. Playing out loud? Tick this so the mic filters out the game's own sound."}
           </p>
           <button className="gm-btn big primary" onClick={onDone}>
-            {tuned.size >= 6 ? "All tuned! Into the forest →" : "Into the forest →"}
+            {tuned.size >= 6 ? "All tuned! " : ""}
+            {INTO[levelAt(session.level).world]}
           </button>
           <p className="muted small">{tuned.size}/6 strings tuned · you can skip</p>
         </div>
@@ -130,19 +219,22 @@ export function BossPicker({ loading, onChoose }: { loading: boolean; onChoose: 
       alive = false;
     };
   }, []);
+  const lv = levelAt(session.level);
+  const boss = lv.kind === "boss" ? lv.boss : null;
   return (
     <div className="gm-modal">
       <div className="gm-panel picker">
-        <h2>Choose the Wolf&apos;s song</h2>
+        <h2>Choose {boss?.songOf ?? "the Wolf's song"}</h2>
         <p className="muted">
-          His attacks follow the song&apos;s easy chart. When a note orb reaches you, play that note to parry it. Between parries, strike back with combos.
+          {boss?.name ?? "The wolf"}&apos;s howls follow the song&apos;s easy chart: when one reaches you, play its chord (or note) to parry it. In between, his
+          pack charges in and he shows his own chord: play it to strike him.
         </p>
         {loading ? (
           <p className="picker-loading">Loading the song…</p>
         ) : (
           <div className="picker-list">
             <button className="gm-btn picker-item primary" onClick={() => onChoose({ kind: "demo", title: "Built-in demo" })}>
-              ♪ The Wolf&apos;s Waltz <small>built-in demo, works offline</small>
+              ♪ {boss?.demo.title ?? "The Wolf's Waltz"} <small>built-in demo, works offline</small>
             </button>
             {songs === null && <p className="muted small">Looking for processed songs…</p>}
             {songs?.map((s) => (
@@ -173,11 +265,13 @@ export function PauseMenu(props: {
   practice: boolean;
   onPractice: (on: boolean) => void;
   onResume: () => void;
-  onSpellbook: () => void;
+  onBook: () => void;
   onRestart: () => void;
   onQuit: () => void;
   mic: MicStatus;
   onMic: () => void;
+  speakers: boolean;
+  onSpeakers: (on: boolean) => void;
 }) {
   return (
     <div className="gm-modal">
@@ -186,15 +280,18 @@ export function PauseMenu(props: {
         <button className="gm-btn big primary" onClick={props.onResume}>
           Resume
         </button>
-        <button className="gm-btn big" onClick={props.onSpellbook}>
-          📖 Spellbook
+        <button className="gm-btn big" onClick={props.onBook}>
+          📖 Chord Book
         </button>
         <label className="sb-practice">
-          <input type="checkbox" checked={props.practice} onChange={(e) => props.onPractice(e.target.checked)} /> Practice mode (wider timing windows)
+          <input type="checkbox" checked={props.practice} onChange={(e) => props.onPractice(e.target.checked)} /> Practice mode (wider timing; root notes count)
         </label>
         <button className="gm-btn" onClick={props.onMic}>
           {props.mic === "on" ? "🎸 Mic on: turn off" : "🎸 Turn the mic on"}
         </button>
+        <label className="sb-practice">
+          <input type="checkbox" checked={props.speakers} onChange={(e) => props.onSpeakers(e.target.checked)} /> Laptop speakers (no headphones)
+        </label>
         <button className="gm-btn" onClick={props.onRestart}>
           Restart this stage
         </button>
@@ -208,7 +305,22 @@ export function PauseMenu(props: {
 
 // ------------------------------------------------------------------ end
 
-export function EndOverlay({ info, onAgain, onBoss, onTitle }: { info: GameOverInfo; onAgain: () => void; onBoss: () => void; onTitle: () => void }) {
+export function EndOverlay({
+  info,
+  onNext,
+  onRetry,
+  onRestart,
+  onTitle,
+}: {
+  info: GameOverInfo;
+  onNext: () => void;
+  onRetry: () => void;
+  onRestart: () => void;
+  onTitle: () => void;
+}) {
+  const lv = levelAt(info.level);
+  const final = info.victory && isFinalLevel(info.level);
+  const next = !final && info.victory ? levelAt(info.level + 1) : null;
   const s = info.stats;
   const secs = Math.round(((s.endedAt ?? s.startedAt) - s.startedAt) / 1000);
   return (
@@ -228,7 +340,7 @@ export function EndOverlay({ info, onAgain, onBoss, onTitle }: { info: GameOverI
             <b>{s.perfects}</b>perfect
           </span>
           <span>
-            <b>{s.specials}</b>spells cast
+            <b>{s.slain}</b>foes slain
           </span>
           <span>
             <b>
@@ -241,14 +353,21 @@ export function EndOverlay({ info, onAgain, onBoss, onTitle }: { info: GameOverI
           </span>
         </div>
         <div className="title-buttons">
-          {!info.victory && info.scene === "Boss" && (
-            <button className="gm-btn big primary" onClick={onBoss}>
-              Retry the Wolf
+          {next && (
+            <button className="gm-btn big primary" onClick={onNext}>
+              🌀 Through the portal: {WORLDS[next.world].era} →
             </button>
           )}
-          <button className={`gm-btn big ${info.victory || info.scene !== "Boss" ? "primary" : ""}`} onClick={onAgain}>
-            {info.victory ? "Play again" : "Restart from the forest"}
-          </button>
+          {!info.victory && (
+            <button className="gm-btn big primary" onClick={onRetry}>
+              Try {lv.id} again
+            </button>
+          )}
+          {final && (
+            <button className="gm-btn big primary" onClick={onRestart}>
+              Travel again from the start
+            </button>
+          )}
           <button className="gm-btn" onClick={onTitle}>
             Title screen
           </button>

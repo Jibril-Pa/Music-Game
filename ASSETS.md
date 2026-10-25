@@ -6,11 +6,13 @@ Every picture and sound in the game is **original and generated in code**. No im
 
 | What | Where | Source | License |
 |---|---|---|---|
-| Bard (hero), wolves, goblins, bridge troll, gingerbread witch, the Big Bad Wolf | `frontend/src/game/art.ts` | Drawn with Phaser `Graphics` at startup | Original, part of this project |
+| Bard (hero), wolves, goblins, bridge troll, gingerbread witch, the Big Bad Wolf (and his desert and mecha forms), jackals, robo-pups | `frontend/src/game/art.ts` | Drawn with Phaser `Graphics` at startup | Original, part of this project |
+| The giant and the beanstalk; scorpions, thieves, mummies, fire djinn, the cave door, the Sphinx; drones, tin soldiers, mechs, laser turrets, the laser gate, the Clockwork Nightingale | `frontend/src/game/art-worlds.ts` | Drawn in code | Original |
+| Desert and future scenery (dunes, pyramids, palms, rocks, urns, the cave, the oasis; city skylines by day and night, lamps, holo signs, crates, the pigs' pod houses), the time portal, the Hourglass of Ages, riddles, laser bolts, song notes | `frontend/src/game/art-worlds.ts` | Drawn in code | Original |
 | Forest backgrounds (sky, hills, tree silhouettes, trees, pines, bushes, mushrooms, clouds, ground) | `frontend/src/game/art.ts` | Drawn in code | Original |
-| Bridge, river, gingerbread house, the three little pigs' houses (straw, sticks, bricks), signpost, campfire | `frontend/src/game/art.ts`, `scenes/Level1.ts` | Drawn in code | Original |
-| Effects: sparkles, slash arc, fireball, shield bubble, wind gust, candy, note orbs, hearts | `frontend/src/game/art.ts` | Drawn in code | Original |
-| Fretboard diagrams (Spellbook) | `frontend/src/components/game/Fretboard.tsx` | SVG generated in code | Original |
+| Bridge, river, gingerbread house, the three little pigs' houses (straw, sticks, bricks), signpost, campfire | `frontend/src/game/art.ts`, `scenes/Journey.ts`, `scenes/worlds.ts` | Drawn in code | Original |
+| Effects: sparkles, magic bolts, wind gust, candy, note orbs, hearts, fairy godmother | `frontend/src/game/art.ts` | Drawn in code | Original |
+| Fretboard diagrams (Chord Book) | `frontend/src/components/game/Fretboard.tsx` | SVG generated in code | Original |
 
 ## Sound (all synthesized at runtime)
 
@@ -18,7 +20,7 @@ Every picture and sound in the game is **original and generated in code**. No im
 |---|---|---|---|
 | Plucked lute / guitar notes and strums | `frontend/src/lib/audio/testSignals.ts`, `lib/game-audio/audio.ts` | Karplus-Strong string synthesis | Original |
 | Sound effects (slash, fireball, uppercut, shield, heal, super, hits, parry, wind...) | `frontend/src/lib/game-audio/audio.ts` | Web Audio oscillators + filtered noise | Original |
-| Level 1 music and the built-in boss song ("The Wolf's Waltz") | `frontend/src/lib/game-audio/music.ts`, `lib/boss/songs.ts` | Procedural E-minor groove (drums, bass, strums, lead) | Original |
+| Level music and the built-in boss songs ("The Wolf's Waltz", "Dance of the Dunes", "Robo-Wolf Rumble") | `frontend/src/lib/game-audio/music.ts`, `lib/boss/songs.ts` | Procedural E-minor grooves per world: folk (drums, bass, strums), desert (hand drums, drone, oud-like plucks), future (four-on-the-floor, synth arpeggios) | Original |
 | Boss fight songs from the pipeline | `backend/data/jobs/*/backing.mp3` | Whatever MP3 *you* upload | Yours. Use music you have the rights to. Not part of the repo. |
 
 ## Fonts
@@ -30,7 +32,7 @@ Every picture and sound in the game is **original and generated in code**. No im
 
 ## Story
 
-All characters and settings come from **public-domain fairy tales**, retold with original designs: the Three Little Pigs and the Big Bad Wolf ("huff and puff"), Three Billy Goats Gruff (the troll under the bridge), Hansel and Gretel (the gingerbread-house witch), Jack and the Beanstalk, and Perrault's Cinderella (1697: the glass slipper and the fairy godmother). Nothing comes from any film or other modern adaptation.
+*The Traveling Bard* is an original story (the wolf steals the Hourglass of Ages and flees through time). Its characters and settings come from **public-domain tales and myths**, retold with original designs: the Three Little Pigs and the Big Bad Wolf ("huff and puff"), Three Billy Goats Gruff (the troll under the bridge), Hansel and Gretel (the gingerbread-house witch), Jack and the Beanstalk (the giant, "Fee-fi-fo-fum"), Perrault's Cinderella (1697: the fairy godmother), *One Thousand and One Nights* (Ali Baba and the Forty Thieves, "Open, Sesame!"; the djinn), the Sphinx and her riddles (Greek myth), and Hans Christian Andersen's *The Steadfast Tin Soldier* (1838, the one-legged tin soldier) and *The Nightingale* (1843, the jeweled mechanical bird). Nothing comes from any film or other modern adaptation.
 
 ## Libraries
 

@@ -20,10 +20,11 @@ const SHAPES: Record<string, number[]> = {
   G: [43, 47, 50, 55, 59, 67], // 320003
   C: [48, 52, 55, 60, 64], // x32010
   D: [50, 57, 62, 66], // xx0232
+  Am: [45, 52, 57, 60, 64], // x02210
 };
 const NOTE_MIDI: Record<string, number[]> = { E: [40, 52, 64], G: [43, 55, 67], A: [45, 57, 69], B: [47, 59, 71], D: [50, 62, 74] };
 
-export const SELF_TEST_GROUPS = ["Single notes", "Em chord (shield)", "E → G (fireball)", "G → C → D chords"] as const;
+export const SELF_TEST_GROUPS = ["Single notes", "Em chord", "E → G notes", "Chord changes (Em G D C Am)"] as const;
 
 export function buildSelfTest(sampleRate: number): { samples: Float32Array<ArrayBuffer>; items: TestItem[]; seconds: number } {
   const items: { item: TestItem; midis: number[]; strumMs: number; amp: number }[] = [];
@@ -39,18 +40,17 @@ export function buildSelfTest(sampleRate: number): { samples: Float32Array<Array
   const singles = ["E", "E", "E", "G", "A", "E", "B", "D", "E", "A"];
   singles.forEach((pc, i) => add("Single notes", "note", pc, [NOTE_MIDI[pc][i % 3]], 0.7));
   t += 0.4;
-  for (let i = 0; i < 10; i++) add("Em chord (shield)", "chord", "Em", SHAPES.Em, 0.9);
+  for (let i = 0; i < 10; i++) add("Em chord", "chord", "Em", SHAPES.Em, 0.9);
   t += 0.4;
   for (let i = 0; i < 10; i++) {
     const oct = i % 2;
-    add("E → G (fireball)", "note", "E", [NOTE_MIDI.E[oct + 1]], 0.3);
-    add("E → G (fireball)", "note", "G", [NOTE_MIDI.G[oct]], 0.8);
+    add("E → G notes", "note", "E", [NOTE_MIDI.E[oct + 1]], 0.3);
+    add("E → G notes", "note", "G", [NOTE_MIDI.G[oct]], 0.8);
   }
   t += 0.4;
-  for (let i = 0; i < 3; i++) {
-    add("G → C → D chords", "chord", "G", SHAPES.G, 0.6);
-    add("G → C → D chords", "chord", "C", SHAPES.C, 0.6);
-    add("G → C → D chords", "chord", "D", SHAPES.D, 1.0);
+  // The foes' chords, changing every 0.9 s (strings from the last chord still ring).
+  for (let i = 0; i < 2; i++) {
+    for (const ch of ["Em", "G", "D", "C", "Am"]) add("Chord changes (Em G D C Am)", "chord", ch, SHAPES[ch], 0.9);
   }
 
   const seconds = t + 1.5;

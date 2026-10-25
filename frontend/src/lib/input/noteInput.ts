@@ -2,12 +2,14 @@
  * The game's note input: mic (Essentia) + an always-on keyboard fallback.
  * Emits NoteEvents: one per pluck / strum / key press, never per frame.
  *
- * Keyboard: Z=E  X=G  C=A  V=B  B=D   1=Em  2=G  3=C  4=D
+ * Keyboard chords: 1=Em 2=G 3=C 4=D 5=A 6=Am 7=E
+ * Keyboard notes:  Z=E  X=G  C=A  V=B  B=D  N=C
  */
 
 import { loadEssentia } from "@/lib/audio/essentia";
 import { startPipeline, type AudioPipeline, type AudioSource } from "@/lib/audio/micPipeline";
 import { DETECT_CONFIG, NoteDetector, type DetectorDiag } from "./detector";
+import { EchoGuard } from "./echoGuard";
 import { pitchClassOf, type ChordName, type NoteEvent, type PitchClass } from "./types";
 
 export const KEY_NOTES: Record<string, { pc: PitchClass; midi: number; label: string }> = {
@@ -16,26 +18,35 @@ export const KEY_NOTES: Record<string, { pc: PitchClass; midi: number; label: st
   KeyC: { pc: "A", midi: 57, label: "C" },
   KeyV: { pc: "B", midi: 59, label: "V" },
   KeyB: { pc: "D", midi: 62, label: "B" },
+  KeyN: { pc: "C", midi: 60, label: "N" },
 };
 export const KEY_CHORDS: Record<string, { chord: ChordName; root: PitchClass; label: string }> = {
   Digit1: { chord: "Em", root: "E", label: "1" },
   Digit2: { chord: "G", root: "G", label: "2" },
   Digit3: { chord: "C", root: "C", label: "3" },
   Digit4: { chord: "D", root: "D", label: "4" },
+  Digit5: { chord: "A", root: "A", label: "5" },
+  Digit6: { chord: "Am", root: "A", label: "6" },
+  Digit7: { chord: "E", root: "E", label: "7" },
 };
-/** Reverse lookup for UI hints: "E" -> "Z", "Em" -> "1" */
-export function keyFor(input: string): string | undefined {
-  return (
-    Object.values(KEY_NOTES).find((k) => k.pc === input)?.label ??
-    Object.values(KEY_CHORDS).find((k) => k.chord === input)?.label
-  );
+/** Keyboard key for a symbol: keyFor("Em", "chord") -> "1", keyFor("E", "note") -> "Z". */
+export function keyFor(input: string, kind: "note" | "chord" = "note"): string | undefined {
+  return kind === "chord"
+    ? Object.values(KEY_CHORDS).find((k) => k.chord === input)?.label
+    : Object.values(KEY_NOTES).find((k) => k.pc === input)?.label;
 }
 
 export type NoteListener = (e: NoteEvent) => void;
 
 /** Page-wide, so ids stay unique even if the NoteInput is recreated. */
 let nextEventId = 1;
-export type DiagListener = (d: DetectorDiag & { latency: LatencyStats }) => void;
+export interface EchoStats {
+  /** How much of the game's sound reaches the mic (0 = none), null while learning. */
+  coupling: number | null;
+  /** Mic events ignored as the game's own sound. */
+  echoes: number;
+}
+export type DiagListener = (d: DetectorDiag & { latency: LatencyStats; echo: EchoStats }) => void;
 export type MicStatus = "off" | "starting" | "on" | "error";
 
 export interface LatencyStats {
@@ -53,6 +64,10 @@ export class NoteInput {
   private statusListeners = new Set<(s: MicStatus, err?: string) => void>();
   private pipeline: AudioPipeline | null = null;
   private detector = new NoteDetector();
+  private echo = new EchoGuard();
+  private source: AudioSource = { kind: "mic" };
+  /** Laptop speakers, no headphones: browser echo cancellation on. */
+  speakerMode = false;
   private latencies: number[] = [];
   private inputLatencyMs: number | null = null;
   private lastDiagAt = 0;
@@ -136,6 +151,8 @@ export class NoteInput {
   async startMic(source: AudioSource = { kind: "mic" }): Promise<void> {
     await this.stopMic();
     const session = ++this.session;
+    this.source = source;
+    if (source.kind === "mic") source = { ...source, echoCancellation: this.speakerMode };
     this.setStatus("starting");
     try {
       await loadEssentia();
@@ -154,6 +171,7 @@ export class NoteInput {
       }
       this.pipeline = pipeline;
       this.detector.reset();
+      this.echo.reset();
       this.latencies = [];
       this.inputLatencyMs = pipeline.inputLatencyMs;
       this.setStatus("on");
@@ -171,6 +189,16 @@ export class NoteInput {
     if (p) await p.stop();
     if (error) this.setStatus("error", error);
     else if (this.status !== "off") this.setStatus("off");
+  }
+
+  /**
+   * Laptop-speaker mode. Restarts a running mic so the browser's echo
+   * cancellation takes effect. (The echo guard runs either way.)
+   */
+  async setSpeakerMode(on: boolean): Promise<void> {
+    if (on === this.speakerMode) return;
+    this.speakerMode = on;
+    if (this.micOn && this.source.kind === "mic") await this.startMic(this.source).catch(() => {});
   }
 
   /** Mic/test-source context time (s) -> performance.now() ms, or null when off. */
@@ -199,7 +227,15 @@ export class NoteInput {
     const p = this.pipeline;
     if (!p) return;
     const endTime = this.frameToPerf(p.audioContext, endFrame, sampleRate) - (this.inputLatencyMs ?? 0);
-    const { detection, diag } = this.detector.push(frame, sampleRate, endTime);
+    const pushed = this.detector.push(frame, sampleRate, endTime);
+    const diag = pushed.diag;
+    this.echo.hop(endTime, frame.subarray(frame.length - DETECT_CONFIG.hopSize), sampleRate);
+    let detection = pushed.detection;
+    if (detection && this.echo.check(detection)) {
+      // The game's own sound from the speakers, not the player.
+      this.detector.retract();
+      detection = null;
+    }
     const now = performance.now();
     if (detection) {
       this.emit({
@@ -215,7 +251,7 @@ export class NoteInput {
     }
     if (this.diagListeners.size && now - this.lastDiagAt > 40) {
       this.lastDiagAt = now;
-      const full = { ...diag, latency: this.latencyStats() };
+      const full = { ...diag, latency: this.latencyStats(), echo: { coupling: this.echo.coupling, echoes: this.echo.echoes } };
       this.diagListeners.forEach((fn) => fn(full));
     }
   }

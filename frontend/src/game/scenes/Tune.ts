@@ -2,7 +2,9 @@ import Phaser from "phaser";
 import { EventBus, onBus } from "../EventBus";
 import { EV } from "../events";
 import { GROUND_Y, burst, text } from "../fx";
-import { forestBackdrop } from "./backdrop";
+import { levelAt, sceneFor } from "../levels";
+import { session } from "../state";
+import { staticBackdrop } from "./worlds";
 
 /** "Tune your lute" by the campfire. The tuner UI is React (TuneOverlay). */
 export class Tune extends Phaser.Scene {
@@ -11,7 +13,7 @@ export class Tune extends Phaser.Scene {
   }
 
   create() {
-    forestBackdrop(this, true);
+    staticBackdrop(this, levelAt(session.level).world, true);
     const fire = this.add.image(760, GROUND_Y + 6, "campfire").setOrigin(0.5, 1).setDepth(5);
     this.tweens.add({ targets: fire, scaleY: 1.08, duration: 180, yoyo: true, repeat: -1 });
     this.add.circle(760, GROUND_Y - 40, 160, 0xffb35c, 0.12).setDepth(4);
@@ -25,6 +27,6 @@ export class Tune extends Phaser.Scene {
 
   private onDone() {
     this.cameras.main.fadeOut(400, 20, 12, 8);
-    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start("Level1"));
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => this.scene.start(sceneFor(session.level)));
   }
 }

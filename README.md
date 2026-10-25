@@ -1,38 +1,49 @@
-# guitar-scroller
+# The Traveling Bard
 
 Two parts in one repo:
 
-1. **The game** (`/play`): *The Bard of the Enchanted Forest*, a fairy-tale side-scrolling fighting game you play with a real guitar. Single notes attack, note sequences cast combos, and the Big Bad Wolf boss fights to a song from the pipeline.
+1. **The game** (`/play`): *The Traveling Bard*, a time-traveling fairy-tale auto-scroller you play with a real guitar: every foe shows a chord, and playing it slays them. Three worlds through time, each ending in a fight against the Big Bad Wolf to a song from the pipeline.
 2. **The song pipeline** (`/preview`, `backend/`): MP3 → note chart + tab/sheet music + backing track (details further down).
 
 ## The game
 
 ```bash
-./dev.sh        # then open http://localhost:3000/play
+./dev.sh        # then open http://localhost:3000/play (http://localhost:3000 redirects there)
 ```
 
-- **Move:** `A`/`D` or `←`/`→`. **Jump:** `Space`. **Pause / Spellbook:** `Esc`. **Dev overlay** (fps + mic latency): `` ` ``.
-- **Attack only with notes:** play a guitar into the mic (*Play with my guitar*), or use the always-on keyboard fallback: `Z X C V B` = E G A B D, `1 2 3 4` = Em G C D chords.
-- Flow: Title → Tune ("tune your lute", mic only) → Level 1 (Enchanted Forest: wolves, goblins, the troll under the bridge, the gingerbread witch) → Big Bad Wolf → Victory/Defeat.
-- Wear **headphones** with the mic so the game music doesn't leak into it.
+**The story:** the Big Bad Wolf has stolen the Hourglass of Ages and fled through time. The bard follows him across three worlds. Each world has two walking levels and a boss fight against the wolf; beat him and he escapes through a time portal to the next world. Each level is harder than the last.
 
-| Move | Play | Effect |
-|---|---|---|
-| Lute Strike | any note | quick jab (fires instantly; cancels into a special if your next notes complete one) |
-| Wolf-Bane Slash | E → A | forward slash, knockback |
-| Dragon's Breath | E → G | fireball |
-| Beanstalk Rise | A → B → D → E | launching uppercut |
-| Glass Slipper Guard | Em chord | shield while the chord rings (~1.5 s) |
-| Godmother's Grace | G → C → D chords | heal 20% |
-| Happily Ever After | E G A B D E with full magic | screen-clearing super with a cinematic |
+| World | Levels | Set pieces | Boss |
+|---|---|---|---|
+| 🌲 *Once Upon a Time* | 1-1 The Enchanted Forest · 1-2 The Moonlit Wood (night) | the troll under the bridge, the gingerbread witch, the giant down the beanstalk, a wolf pack | The Big Bad Wolf, in the Three Little Pigs' meadow |
+| 🏜️ *A Thousand and One Nights* | 2-1 The Singing Dunes · 2-2 The Sphinx's Road (dusk) | Ali Baba's cave ("Open, Sesame!", then the thieves pour out), the Sphinx throwing riddles | The Wolf of the Dunes (sandstorm gusts, a jackal pack) |
+| 🌃 *Ever After, Year 3000* | 3-1 Gearworks City · 3-2 The Neon Skyway (night) | a laser gate, the Clockwork Nightingale | MECHA-WOLF 3000 (turbo gusts, robo-pups), then the Hourglass comes home |
 
-Notes must come within 700 ms of each other (1.2 s in practice mode). Octave doesn't matter. Notes within ±80 ms of the beat are **Perfect** (×1.5 damage, more magic); Good is ±160 ms; Off is never punished. Every move is in the in-game **Spellbook**, with fretboard diagrams (open strings are enough for everything).
+Each world has its own foes (wolves and goblins; scorpions, thieves, mummies and fire djinn; drones, tin soldiers, mechs and laser turrets), its own art and its own groove (folk strums, desert hand drums and oud, future synths), always in E minor so your chords fit.
 
-**Boss:** pick a processed song (any finished job from the pipeline) or the built-in demo. In *parry* phases, the easy-chart notes become note orbs that appear above the wolf and fly at you. Play that note within ±150 ms of its arrival to parry and counter. Each note is mapped to the nearest open string (E G A B D), so every attack is playable on open strings or the keyboard. In *free* phases, attack with combos and watch for the huff-and-puff wind (strum Em to block it).
+**Harder as you go** (`frontend/src/game/levels.ts`): the bard walks faster, foes are faster and hit harder, more foes need several chords, the music speeds up (100 → 118 BPM), and the bosses have more HP, show their howls for less time and call their pack more often. Beating a level unlocks it on the title screen's journey map (saved in the browser; `/play?unlock` opens every level in dev builds).
+
+Inspired by Google's *Magic Cat Academy* doodle, with a guitar instead of a mouse:
+
+- **The bard walks on their own** (auto-scroller). Foes come in from the right.
+- **Every foe shows a chord over its head. Play it to slay them.** Every foe showing that chord is hit at once. Any foe may be a tougher one that needs 2–3 chords, played left to right (more likely in later levels). Set pieces block the path until you've played all their chords; casters (the witch, djinn, turrets, the Sphinx, the Nightingale) throw things that also carry chords.
+- **Chords:** Em, G, D, C, Am. Em and G come first; the rest join as you go. They're all in E minor, the key of the music, so whatever you play fits.
+- **The music follows you:** when you play a chord (or note), the backing's bass and harmony move to it on the next half-beat, so your playing blends in.
+- **Fairy godmother:** appears now and then (and when you're low). Play **A** to heal 25%.
+- **Happily Ever After:** slaying fills the magic meter. When it's full, play **E** (major) and every foe on screen vanishes.
+- **Rhythm bonus:** chords on the beat score Perfect (more magic). Wrong chords just fizzle; nothing is punished.
+- **Single notes mode** (title screen) is easier: foes ask for open strings E A D G; B heals, C is the super.
+- **No guitar?** Keys `1`–`7` = Em G C D A Am E. In notes mode, `Z X C V B N` = E G A B D C. Key hints show under each chord when you play with the keyboard.
+- **Practice mode** (pause menu or Chord Book) widens the timing, and in chords mode the chord's root note alone also counts.
+- **Bosses:** pick a processed song from the pipeline (or the world's built-in demo).
+  - In *howl* phases, the easy-chart notes become howls carrying a chord (mapped from the song note). Play it as the howl reaches you to parry it back at him.
+  - In *pack* phases, his pack charges in, the wolf shows his own chord (play it to strike him), and his huff-and-puff gust carries a chord you play to blow it back.
+- **Chord helper:** the chords you need right now (nearest foe first, plus the heal or super chord when it's on offer) sit at the bottom of the screen with their fretboard diagrams, so beginners never have to remember a shape.
+- `Esc` pauses. The in-game **Chord Book** shows every chord with a fretboard diagram. Headphones work best with the mic; playing out loud through the laptop, tick **Laptop speakers** on the tuning screen or in the pause menu (see below).
 
 ### Note input engine
 
-`frontend/src/lib/input/` (`detector.ts` + `noteInput.ts`), built on the tuner's Essentia.js loader and AudioWorklet pipeline (`src/lib/audio/`, mic constraints with echo cancellation, noise suppression and auto gain off):
+`frontend/src/lib/input/` (`detector.ts` + `noteInput.ts`), built on the tuner's Essentia.js loader and AudioWorklet pipeline (`src/lib/audio/`, mic constraints with noise suppression and auto gain off, and echo cancellation off unless *Laptop speakers* is on):
 
 - **Onsets:** the pick's high-frequency transient, or a jump in loudness. This works even over ringing strings. A sustained note never re-triggers, and events are at least 120 ms apart.
 - **Notes:** Essentia PitchYin on the audio *after* the onset; two agreeing confident readings = one note (~50 ms after the pluck).
@@ -45,19 +56,39 @@ Measured with a synthetic guitar through the real pipeline (`/input-test` → *R
 | | detected | pluck → event |
 |---|---|---|
 | single notes | 10/10 | ~50 ms |
-| Em chord | 10/10 | ~85 ms |
-| E → G (fireball) | 20/20 notes (10/10 runs) | ~50 ms |
-| G → C → D chords | 7–9 of 9 | ~80 ms |
+| Em chord | 9–10 of 10 | ~85 ms |
+| E then G notes | 20/20 | ~50 ms |
+| chord changes Em G D C Am (0.9 s apart, old strings still ringing) | 9–10 of 10 | ~85 ms |
 
 A real guitar still needs checking: run `/input-test` with yours. The thresholds live at the top of `detector.ts`.
 
+### Listening only to your guitar
+
+The browser's own voice processing is off (it dulls a guitar), so the game filters what isn't guitar itself:
+
+- **Voices, clicks, room noise** (`detector.ts`): a note's pitch must hold steady (speech glides), its level must peak fast and not keep swelling (voices swell), and it must still ring when the decision is made (clicks die at once). Onsets must stand 3× above the background noise, which is learned whenever nothing has been played for 1.5 s. Hearing the note or chord that's already ringing again needs a real re-pluck (the level jumps), and once you've played a few notes, sounds adding under 30% of what your playing adds are ignored.
+- **The game's own sound** (`echoGuard.ts`, `src/lib/audio/outputLog.ts`): the game logs every sound it plays (when, and which notes) and measures its own output. At game sounds you're not playing over, the mic learns how much of the game reaches it (about 0 with headphones). A mic event that starts with a game sound (±45 ms) and adds no more than about what that sound would add at the mic (×1.25, or ×1.05 during a recorded boss song, whose notes the game doesn't know) is ignored. Both sides are measured above ~200 Hz, since speakers differ most in bass.
+- **Laptop speakers** (checkbox on the tuning screen and in the pause menu, remembered in the browser): halves the music volume and turns on the browser's echo cancellation. The echo guard runs either way.
+- `/input-test` shows the background noise, how many sounds were ignored as not-guitar, how much game sound reaches the mic and how many echoes were ignored.
+
+Offline benches (from `frontend/`; each takes `--trace`, and `DETECT='{...}'` / `ECHO='{...}'` to try other thresholds):
+
+| | what it checks | now |
+|---|---|---|
+| `npx tsx scripts/detector-bench.ts [44100]` | guitar recall, synthetic self-test | 48/50 at 48 kHz (two Em heard as G), 50/50 at 44.1 kHz |
+| `npx tsx scripts/noise-bench.ts` | voices, singing, keyboard clicks, fan hiss and leaked strums between guitar notes, as loud as the guitar | fake events 21 → 13 (speech 0, singing 1, clicks 1); guitar 44/50 |
+| `npx tsx scripts/echo-bench.ts [--onbeat] [--flat] [--song] [--skew=25]` | the game's groove leaking from laptop speakers at normal / loud / very loud volume | fake events 18 → 0, 39 → 1, 52 → 2; guitar within 1 of no guard; nothing ignored with headphones |
+
 ### Tuning and dev tools
 
-- `frontend/src/lib/combat/combos.ts`: every move's inputs, damage, range, knockback, hit-stop and magic (data-driven).
-- `frontend/src/lib/combat/rhythm.ts`: Perfect/Good/parry windows; practice-mode widths.
-- `frontend/src/game/entities/Enemy.ts`: enemy stats. `scenes/Level1.ts`: waves. `scenes/Boss.ts`: wolf HP, parry damage, orb lead time.
-- `npx tsx scripts/combo-check.ts`: checks the combo rules.
-- `scripts/playtest-bot.js`: paste into the console on `/play` and it plays the whole game with the keyboard (dev builds expose `window.__game`, `window.__noteInput()`, and `window.__synthPlay([...])`, which plays synthesized plucks through the mic pipeline).
+- `frontend/src/lib/combat/spells.ts`: which chords foes use and when, the heal/super chords, how often foes are tougher, song note → chord mapping.
+- `frontend/src/lib/combat/rhythm.ts`: Perfect/Good windows; practice-mode widths.
+- `frontend/src/game/levels.ts`: the worlds, every level's spawn schedule, set pieces and difficulty, and each boss (HP, howl timing, pack, song).
+- `frontend/src/game/entities/Enemy.ts`: foe speed, damage, base chord count, what casters throw. `scenes/Journey.ts`: the walking levels and their set pieces. `scenes/Boss.ts`: parry window and damage. `scenes/worlds.ts`: how each world looks.
+- `frontend/src/game/art.ts`, `art-worlds.ts`: all the art, drawn in code.
+- `frontend/src/lib/game-audio/music.ts`: the procedural backing for each world and how it follows the player (`follow()`).
+- `npx tsx scripts/spells-check.ts`: checks the chord-to-slay rules and the level data (difficulty rises level to level).
+- `scripts/playtest-bot.js`: paste into the console on `/play` and it plays the journey with the keyboard, through the portals (set `__botSpeed` / `__botMiss` for a slower, sloppier player). Dev builds expose `window.__game`, `window.__playLevel(i)` (jump to a level), `window.__noteInput()`, and `window.__synthPlay([...])`, which plays synthesized plucks through the mic pipeline.
 - Leaving `/play` stops the mic (tracks stopped, AudioContext closed).
 
 ---

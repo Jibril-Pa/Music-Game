@@ -88,6 +88,27 @@ Offline benches (from `frontend/`; each takes `--trace`, and `DETECT='{...}'` / 
 | `npx tsx scripts/noise-bench.ts` | voices, singing, keyboard clicks, fan hiss and leaked strums between guitar notes, as loud as the guitar | fake events 21 → 12 (speech syllables 0, singing 1, clicks 1); guitar 45/50 |
 | `npx tsx scripts/echo-bench.ts [--onbeat] [--flat] [--song] [--skew=25]` | the game's groove leaking from laptop speakers at normal / loud / very loud volume | fake events 17 → 0, 38 → 1, 50 → 2; guitar within 1 of no guard; nothing ignored with headphones |
 
+### The lute's coach (Gemini + Tiger Data)
+
+The bard's lute hears every chord you play, and after each world (or a defeat) it coaches you. A card on the End screen gives one tip and a short drill, and **The Lute's Notebook** has the rest: every tip, the drill's chord boxes, and your progress across runs.
+
+- **Tiger Data** keeps every judged input as a time series (`backend/app/tiger.py`). The game posts them in small batches while you play (`frontend/src/lib/coach/log.ts`). Each row stores what the ear heard, what was wanted, hit or miss, timing against the beat, confidence and latency.
+  - `plays` and `runs` are hypertables, columnstore-compressed and segmented by player.
+  - `chord_hourly` is a real-time continuous aggregate (accuracy per chord per hour) that Tiger refreshes every 10 minutes.
+  - The coach's history comes from SQL over these tables: accuracy per chord per day and per run, chord changes you miss on the first strum (a `lag()` window), mix-ups (C heard as Am), timing, and every bard's numbers for the last 24 hours.
+- **Gemini** (`backend/app/coach.py`) reads only those measured facts, plus the chord shapes and fingerings the game teaches. It answers in a fixed JSON schema (headline, praise, focus, tips, drill, goal), which the card draws. It names the physical cause of a mix-up: C heard as Am means the ring finger isn't pressing the A string at fret 3.
+- **Offline first:** both services are optional. Without keys, or with no wifi, the game plays the same, and the lute gives its built-in tips (`frontend/src/lib/coach/advice.ts`). These use the same numbers and explain a mix-up by comparing the two chord boxes string by string. Plays are anonymous: a random id per browser, no audio.
+
+Setup: `./setup.sh` creates `backend/.env` from `backend/.env.example`. Fill it in:
+
+```bash
+GEMINI_API_KEY=...        # https://aistudio.google.com/apikey
+GEMINI_MODEL=gemini-3.8-flash
+TIGER_DATABASE_URL=postgresql://tsdbadmin:<password>@<host>:<port>/tsdb?sslmode=require   # Tiger Cloud > your service
+```
+
+Restart `./dev.sh`. The tables are created on the first connection, and `GET /health` shows `coach: {tiger, gemini}` (`ok`, `off` or the error). To try it without Tiger Cloud, run a local TimescaleDB: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=pw timescale/timescaledb:latest-pg17`, then set `TIGER_DATABASE_URL=postgresql://postgres:pw@localhost:5432/postgres`.
+
 ### Tuning and dev tools
 
 - `frontend/src/lib/combat/spells.ts`: which chords foes use and when, the heal/super chords, how often foes are tougher, song note → chord mapping.
@@ -98,6 +119,7 @@ Offline benches (from `frontend/`; each takes `--trace`, and `DETECT='{...}'` / 
 - `frontend/src/game/stage/`: the 2.5D stage. `Stage3D.ts` (renderer and the camera that follows Phaser's), `worlds3d.ts` (the forest, desert and future worlds, set pieces, arenas), `scaffold.ts` (sky, fog, lights and shadows, ground and path, clouds, portal, fireworks), `kit.ts` (toon materials, ink outlines, low-poly props, instancing, particles, water). If WebGL 3D isn't available the scenes fall back to their 2D backdrops.
 - `frontend/src/lib/game-audio/music.ts`: the procedural backing for each world and how it follows the player (`follow()`).
 - `npx tsx scripts/spells-check.ts`: checks the chord-to-slay rules and the level data (difficulty rises level to level).
+- `npx tsx scripts/coach-check.ts`: checks the lute's coach without a backend (what a miss was aimed at, the run summary, the built-in tips). `cd backend && .venv/bin/python -m pytest -q tests/test_coach.py` checks the Gemini side (facts, schema clean-up, fallbacks) with no network.
 - `scripts/playtest-bot.js`: paste into the console on `/play` and it plays the journey with the keyboard, through the portals (set `__botSpeed` / `__botMiss` for a slower, sloppier player). Dev builds expose `window.__game`, `window.__playLevel(i)` (jump to a level), `window.__noteInput()`, and `window.__synthPlay([...])`, which plays synthesized plucks through the mic pipeline.
 - Leaving `/play` stops the mic (tracks stopped, AudioContext closed).
 
@@ -116,7 +138,7 @@ Turns an MP3 (or, optionally, a YouTube link) into level data for the side-scrol
 | `guitar.wav` | the isolated part the player plays |
 | `backing.mp3` | the song with that part removed (`backing + guitar = original mix`) |
 
-Everything runs locally: backend at http://localhost:8000, frontend at http://localhost:3000. No cloud, no auth, no database.
+Everything runs locally: backend at http://localhost:8000, frontend at http://localhost:3000. The pipeline needs no cloud, auth or database. Only the game's optional coach talks to Gemini and Tiger Data (see above).
 
 ## Setup (once)
 
@@ -180,7 +202,10 @@ Re-running the same file with the same settings is instant (cached by SHA-256 of
 | `POST /jobs/{id}/rerun` | JSON `{"source": "other", "force"?: false}`: same song, different stem. Takes seconds, because the Demucs stems are reused |
 | `GET /jobs/{id}/files/{name}` | one of the six files (`?download=1` for an attachment) |
 | `GET /jobs` | recent jobs |
-| `GET /health` | device, YouTube on/off |
+| `GET /health` | device, YouTube on/off, coach status (`tiger`, `gemini`, `model`) |
+| `POST /plays` | the lute's coach: `{playerId, runId, plays: [...], run?}` → stored in Tiger Data (accepts `text/plain`, so the game needs no CORS preflight) |
+| `POST /coach` | `{playerId, runId, run}` → `{advice, source, model, history, services}`: Gemini's advice (null if off or failed) and the bard's history from Tiger Data |
+| `GET /progress/{playerId}` | `?mode=chords\|notes` → `{history, services}` |
 
 Interactive docs: http://localhost:8000/docs. Jobs run one at a time in a background thread inside the FastAPI process. Each job lives in `backend/data/jobs/<first 16 hex of sha256>/` (plus `-<source>` for non-guitar sources), and unfinished jobs are re-queued when the server restarts.
 
@@ -232,11 +257,16 @@ backend/
     __main__.py        # CLI
     youtube.py         # optional, isolated (ENABLE_YOUTUBE=true)
   app/                 # FastAPI server + job worker
+    tiger.py           # Tiger Data: schema (hypertables, continuous aggregate) and the coach's history queries
+    coach.py           # Gemini: the facts it reads, the JSON schema it answers in, fallbacks
+    coach_api.py       # /plays, /coach, /progress
   setup_models.py      # download / verify models for offline use
   tools/               # make_test_clip.py, eval_chart.py
-  tests/               # pytest: chart + notation rules
+  tests/               # pytest: chart + notation rules, the coach (no network)
   data/jobs/<hash>/    # job inputs and outputs (gitignored)
 frontend/              # Next.js + TypeScript; preview page at /preview
+  src/lib/coach/       # the lute's memory (log.ts), run summary, built-in tips
+  src/components/game/Lute.tsx   # the End screen card and the Lute's Notebook
   src/components/pipeline/   # PreviewPage, LaneView (canvas + audio sync), ScoreView (alphaTab)
 ```
 
@@ -249,6 +279,11 @@ frontend/              # Next.js + TypeScript; preview page at /preview
 | `GS_ONSET_THRESHOLD`, `GS_FRAME_THRESHOLD`, `GS_MIN_NOTE_MS`, `GS_MIN_AMPLITUDE` | see CLI | API-side tuning |
 | `GS_MAX_DURATION_SEC` | 480 | longer songs are rejected |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | frontend → backend URL |
+| `GEMINI_API_KEY` | | the lute's advice (Gemini). In `backend/.env` |
+| `GEMINI_MODEL` | `gemini-3.8-flash` | falls back to `gemini-flash-latest` if the model isn't available |
+| `TIGER_DATABASE_URL` | | Tiger Data service URL (any TimescaleDB works). In `backend/.env` |
+| `GS_CORS_ORIGINS` | | extra frontend origins, comma-separated (localhost:3000 and https://thetravelinglute.tech are always allowed) |
+| `NEXT_PUBLIC_COACH` | `on` | `off`: send nothing, built-in tips only |
 
 ## Testing
 

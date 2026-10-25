@@ -44,6 +44,9 @@ cd "$ROOT/backend"
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python -m pip install --no-deps basic-pitch==0.4.0
 
+# The lute's coach (optional): Gemini key + Tiger Data URL go in backend/.env (git-ignored).
+[ -f .env ] || cp .env.example .env
+
 say "Downloading models (Demucs htdemucs_6s, Basic Pitch check)"
 .venv/bin/python setup_models.py
 
@@ -52,3 +55,4 @@ cd "$ROOT/frontend"
 npm install
 
 say "Done. Start everything with ./dev.sh, then open http://localhost:3000/preview"
+echo "Optional: add GEMINI_API_KEY and TIGER_DATABASE_URL to backend/.env for the lute's coach (see README)."

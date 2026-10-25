@@ -36,6 +36,9 @@ if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
 & $vpy -m pip install -r requirements.txt
 & $vpy -m pip install --no-deps basic-pitch==0.4.0
 
+# The lute's coach (optional): Gemini key + Tiger Data URL go in backend\.env (git-ignored).
+if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
+
 Write-Host "`n==> Downloading models (Demucs htdemucs_6s, Basic Pitch check)"
 & $vpy setup_models.py
 
@@ -45,3 +48,4 @@ npm install
 Set-Location $Root
 
 Write-Host "`n==> Done. Start everything with .\dev.ps1, then open http://localhost:3000/preview"
+Write-Host "Optional: add GEMINI_API_KEY and TIGER_DATABASE_URL to backend\.env for the lute's coach (see README)."

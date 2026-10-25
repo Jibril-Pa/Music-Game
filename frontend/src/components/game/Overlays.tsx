@@ -70,7 +70,7 @@ export function TitleOverlay({
   const [level, setLevel] = useState(readUnlocked);
   const lv = levelAt(level);
   return (
-    <div className="gm-bottom gm-raised">
+    <div className="gm-bottom gm-raised title-side">
       <div className="gm-panel title-panel">
         <div className="title-row">
           <div className="mode-toggle" role="radiogroup" aria-label="What foes ask for">
@@ -94,22 +94,23 @@ export function TitleOverlay({
             📖 {playMode === "chords" ? "Chord" : "Note"} Book
           </button>
         </div>
-        <p className="jm-pick muted small">
-          Starting at <b>{lv.id}</b>: {lv.name} ({WORLDS[lv.world].era})
-        </p>
         {micError && <p className="gm-error">Couldn&apos;t use the microphone: {micError} You can still play with the keyboard.</p>}
         <p className="title-help">
-          The Big Bad Wolf stole the Hourglass of Ages! Chase him through time. Every foe shows a {playMode === "chords" ? "chord" : "note"}:{" "}
-          <b>play it to slay them</b>. No guitar? {playMode === "chords" ? (
-            <>
-              keys <kbd>1</kbd>–<kbd>7</kbd> = Em G C D A Am E
-            </>
-          ) : (
-            <>
-              keys <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> <kbd>B</kbd> <kbd>N</kbd> = E G A B D C
-            </>
-          )}
-          . <kbd>Esc</kbd> pauses. <Link href="/input-test">Test your input</Link> · <Link href="/preview">Song pipeline</Link>
+          The Big Bad Wolf stole the Hourglass of Ages: chase him through time and <b>play the {playMode === "chords" ? "chord" : "note"} over each foe</b>.
+          <br />
+          <span className="muted small">
+            Starting at <b>{lv.id}</b> {lv.name} · No guitar?{" "}
+            {playMode === "chords" ? (
+              <>
+                keys <kbd>1</kbd>–<kbd>7</kbd> = Em G C D A Am E
+              </>
+            ) : (
+              <>
+                keys <kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> <kbd>B</kbd> <kbd>N</kbd> = E G A B D C
+              </>
+            )}{" "}
+            · <kbd>Esc</kbd> pauses · <Link href="/input-test">Test your input</Link> · <Link href="/preview">Song pipeline</Link>
+          </span>
         </p>
       </div>
     </div>

@@ -12,7 +12,8 @@ Every picture and sound in the game is **original and generated in code**. No im
 | Forest backgrounds (sky, hills, tree silhouettes, trees, pines, bushes, mushrooms, clouds, ground) | `frontend/src/game/art.ts` | Drawn in code | Original |
 | Bridge, river, gingerbread house, the three little pigs' houses (straw, sticks, bricks), signpost, campfire | `frontend/src/game/art.ts`, `scenes/Journey.ts`, `scenes/worlds.ts` | Drawn in code | Original |
 | Effects: sparkles, magic bolts, wind gust, candy, note orbs, hearts, fairy godmother | `frontend/src/game/art.ts` | Drawn in code | Original |
-| Fretboard diagrams (Chord Book) | `frontend/src/components/game/Fretboard.tsx` | SVG generated in code | Original |
+| Fretboard diagrams (Chord Book, chord helper) | `frontend/src/components/game/Fretboard.tsx` | SVG generated in code | Original |
+| The 3D worlds (2.5D stage): terrain and path, trees, pines, bushes, flowers, mushrooms, rocks, hills, mountains, clouds, river and bridge, gingerbread house, beanstalk, the pigs' houses; dunes, pyramids, mesas, palms, urns, the cave, ruins and obelisks, oasis, tent; city blocks with windows, neon signs, lamps, monorail, flying cars, checkpoint gate, clock tower with gears, pod houses; sky, sun, moon, stars, fireflies, sand and neon motes, the time portal, fireworks | `frontend/src/game/stage/` | Built procedurally in code with Three.js geometry and shaders (no models or textures loaded) | Original |
 
 ## Sound (all synthesized at runtime)
 
@@ -39,6 +40,7 @@ Every picture and sound in the game is **original and generated in code**. No im
 | Library | Used for | License |
 |---|---|---|
 | Phaser 3.90 | game engine | MIT |
+| Three.js 0.186 | the 3D worlds behind the 2D characters | MIT |
 | Next.js 16, React 19 | frontend | MIT |
 | Essentia.js 0.1.3 | pitch (PitchYin) and chroma (HPCP) | **AGPL-3.0**: fine for a hackathon demo; check this before shipping a closed product |
 | alphaTab 1.8 | tab and sheet-music rendering (`/preview`) | MPL-2.0 |

@@ -8,6 +8,7 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef } from "react";
 import type Phaser from "phaser";
 import StartGame from "./main";
+import { mountStage, unmountStage } from "./stage";
 import { EventBus } from "./EventBus";
 import { EV } from "./events";
 
@@ -28,12 +29,18 @@ export const PhaserGame = forwardRef<IRefPhaserGame, IProps>(function PhaserGame
     const timer = window.setTimeout(() => {
       created = StartGame("game-container");
       game.current = created;
+      // Dev only: scripts can drive the game even before the first scene is ready.
+      if (process.env.NODE_ENV !== "production") (window as unknown as { __game?: Phaser.Game }).__game = created;
+      // The 2.5D stage: a 3D world on a canvas behind Phaser's (see stage/).
+      const container = document.getElementById("game-container");
+      if (container) mountStage(created, container);
       if (typeof ref === "function") ref({ game: created, scene: null });
       else if (ref) ref.current = { game: created, scene: null };
     }, 0);
     return () => {
       window.clearTimeout(timer);
       if (created) {
+        unmountStage(created);
         const canvas = created.canvas;
         created.destroy(true);
         canvas?.remove();

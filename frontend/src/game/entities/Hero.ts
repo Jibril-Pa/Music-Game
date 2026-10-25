@@ -1,5 +1,8 @@
 import Phaser from "phaser";
-import { GROUND_Y } from "../fx";
+import { PAPER_PAD } from "../art-kit";
+import { GROUND_Y, restoreTint } from "../fx";
+
+const WALK = ["hero_walk1", "hero_walk2", "hero_walk3", "hero_walk4"];
 
 /** The wandering bard. Movement on the keyboard; attacks come from notes. */
 export class Hero extends Phaser.Physics.Arcade.Sprite {
@@ -22,10 +25,11 @@ export class Hero extends Phaser.Physics.Arcade.Sprite {
     this.maxHp = this.hp = maxHp;
     this.setOrigin(0.5, 1).setDepth(20);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(46, 108).setOffset(30, 30);
+    body.setSize(46, 108).setOffset(30 + PAPER_PAD, 30 + PAPER_PAD);
     body.setMaxVelocityY(1400);
     this.shadow = scene.add.image(x, GROUND_Y + 4, "shadow").setDepth(5).setScale(0.8, 1);
     this.shieldFx = scene.add.image(x, GROUND_Y - 70, "shield").setDepth(25).setVisible(false);
+    restoreTint(this);
   }
 
   get body2(): Phaser.Physics.Arcade.Body {
@@ -48,14 +52,16 @@ export class Hero extends Phaser.Physics.Arcade.Sprite {
   tick(now: number, dtMs: number, moving: boolean) {
     this.setFlipX(this.facing < 0);
     if (now < this.hurtUntil) {
-      this.setTexture("hero");
+      this.setTexture("hero_hurt");
       this.setAlpha(Math.floor(now / 60) % 2 ? 0.45 : 1);
     } else {
       this.setAlpha(now < this.invulnUntil ? (Math.floor(now / 90) % 2 ? 0.6 : 1) : 1);
-      if (now < this.actionUntil) this.setTexture("hero_attack");
-      else if (moving && this.onGround) {
+      if (now < this.actionUntil) {
+        // Strum down, then up.
+        this.setTexture(this.actionUntil - now > 110 ? "hero_strum1" : "hero_strum2");
+      } else if (moving && this.onGround) {
         this.walkPhase += dtMs;
-        this.setTexture(Math.floor(this.walkPhase / 130) % 2 ? "hero_walk" : "hero");
+        this.setTexture(WALK[Math.floor(this.walkPhase / 115) % WALK.length]);
       } else this.setTexture("hero");
     }
     // idle bob / squash

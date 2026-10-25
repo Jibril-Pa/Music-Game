@@ -86,7 +86,7 @@ export function Ear({ heard, micOn }: { heard: HeardEntry[]; micOn: boolean }) {
   );
 }
 
-const ROLE_LABEL = { foe: "", heal: "heal", super: "super!" } as const;
+const ROLE_LABEL = { foe: "", heal: "heal", super: "super!", howl: "next howl" } as const;
 
 /** Beginner helper: the shapes of the chords you need right now, at the bottom. */
 export function ChordHelper({ hud, keyboard }: { hud: HudState | null; keyboard: boolean }) {

@@ -25,53 +25,103 @@ export const PALETTE = {
 };
 
 // ------------------------------------------------------------------- hero
-function hero(g: G, pose: "idle" | "walk" | "attack" | "hurt") {
-  const skin = 0xf2c49b;
-  // cape
-  poly(g, pts(34, 62, 62, 62, 72, 120, 20, 122), 0xb8452c);
-  // legs
-  if (pose === "walk") {
-    stick(g, 44, 100, 34, 128, 10, 0x4a3426);
-    stick(g, 58, 100, 68, 126, 10, 0x4a3426);
-    rrect(g, 24, 122, 18, 11, 4, 0x6b4226);
-    rrect(g, 62, 120, 18, 11, 4, 0x6b4226);
+export type HeroPose = "idle" | "walk1" | "walk2" | "walk3" | "walk4" | "strum1" | "strum2" | "hurt";
+
+/**
+ * The traveling bard: crimson feathered cap, green tunic with gold trim,
+ * flowing cape, and a lute with real strings. Faces right.
+ */
+function hero(g: G, pose: HeroPose) {
+  const skin = 0xf6c9a0;
+  const hair = 0x8a4b22;
+  const tunic = 0x3f9a5a;
+  const tunicShade = 0x2f7a46;
+  const crimson = 0xb8323a;
+  const step = pose === "walk1" ? 1 : pose === "walk3" ? -1 : 0;
+  const bob = pose === "walk2" || pose === "walk4" ? -2 : 0;
+  const hurt = pose === "hurt";
+
+  // cape, flowing behind
+  const sway = step * 3 + (pose === "walk2" ? -2 : pose === "walk4" ? 2 : 0);
+  poly(g, pts(36, 60 + bob, 60, 58 + bob, 64, 108, 46 + sway, 124, 18 + sway, 116), 0xc0392b);
+  g.fillStyle(0x8a2430, 1).fillPoints(pts(38, 64 + bob, 47, 64 + bob, 40 + sway, 116, 24 + sway, 113), true);
+
+  // legs and boots
+  const leg = (hipX: number, footX: number, color: number) => {
+    stick(g, hipX, 100 + bob, footX, 129, 10, color);
+    poly(g, pts(footX - 8, 127, footX + 6, 127, footX + 12, 133, footX + 11, 139, footX - 9, 139), 0x6b3a1c, 4);
+  };
+  if (step !== 0) {
+    leg(46, 46 - 11 * step, 0x3b2e4a);
+    leg(56, 56 + 11 * step, 0x4a3a5a);
   } else {
-    stick(g, 44, 100, 42, 126, 10, 0x4a3426);
-    stick(g, 58, 100, 60, 126, 10, 0x4a3426);
-    rrect(g, 34, 122, 18, 11, 4, 0x6b4226);
-    rrect(g, 54, 122, 18, 11, 4, 0x6b4226);
+    leg(46, 44, 0x3b2e4a);
+    leg(57, 60, 0x4a3a5a);
   }
-  // torso
-  rrect(g, 32, 58, 40, 48, 12, 0x3f8f4f);
-  g.fillStyle(0x6b4226, 1).fillRect(34, 92, 36, 6);
-  circle(g, 52, 95, 4, PALETTE.gold, 3);
-  // head + hair + hat
-  circle(g, 46, 40, 18, 0x6b3f22);
-  circle(g, 54, 43, 16, skin);
-  g.fillStyle(OUT, 1).fillCircle(61, 40, 3);
-  g.fillStyle(0xe8897a, 0.7).fillCircle(62, 48, 3.5);
-  line(g, 58, 51, 64, 50, 2.5);
-  poly(g, pts(16, 4, 30, 12, 44, 22, 30, 20, 20, 14), PALETTE.gold, 3); // feather
-  poly(g, pts(30, 30, 76, 30, 66, 14, 40, 12), 0x9c2f2f);
-  ellipse(g, 54, 31, 52, 10, 0x7d2424, 4);
-  // lute
-  const swing = pose === "attack";
-  if (swing) {
-    stick(g, 64, 80, 104, 70, 6, 0x7a4a24);
-    rrect(g, 98, 62, 12, 10, 3, 0x5a3418, 3);
-    ellipse(g, 62, 84, 32, 26, 0xc07a35);
-    circle(g, 64, 82, 5, OUT, 0);
-    circle(g, 92, 72, 6, skin, 3);
+
+  g.save();
+  g.translateCanvas(0, bob);
+  // the far arm reaches forward to hold the lute's neck
+  stick(g, 46, 68, 84, 63, 8, tunicShade);
+  // tunic
+  poly(g, pts(35, 58, 69, 58, 74, 104, 30, 104), tunic);
+  g.fillStyle(tunicShade, 1).fillPoints(pts(58, 59, 68, 59, 72.5, 102, 61, 102), true);
+  g.fillStyle(PALETTE.gold, 1).fillRect(31, 98, 42, 4);
+  poly(g, pts(45, 58, 59, 58, 52, 69), 0xf2c14e, 3); // gold collar
+  rrect(g, 32, 87, 40, 7, 2, 0x5a3418, 3); // belt
+  rrect(g, 47, 85.5, 10, 10, 2, PALETTE.gold, 3); // buckle
+
+  // lute: neck, pegbox, pear-shaped body, rosette, strings
+  stick(g, 62, 88, 99, 57, 6, 0x7a4a24);
+  poly(g, pts(97, 53, 106, 47, 110, 52, 101, 59), 0x5a3418, 3);
+  for (const [px, py] of [[101, 49], [105, 47], [104, 55], [108, 53]]) g.fillStyle(0xf6e7c1, 1).fillCircle(px, py, 1.8);
+  ellipse(g, 67, 83, 22, 19, 0xd08a3a);
+  ellipse(g, 57, 91, 33, 28, 0xd08a3a);
+  g.fillStyle(0xd08a3a, 1).fillEllipse(62, 87, 22, 16);
+  g.fillStyle(0xa86a28, 1).fillEllipse(54, 96, 20, 12);
+  g.lineStyle(2, 0xf2c14e, 1).strokeCircle(61, 88, 6.5);
+  g.fillStyle(OUT, 1).fillCircle(61, 88, 4.5);
+  g.lineStyle(1.2, 0xfff6dc, 0.95);
+  for (const d of [-1.6, 0, 1.6]) g.lineBetween(51 + d * 0.6, 96 + d, 99 + d * 0.6, 57 + d);
+  rrect(g, 49, 94, 7, 4, 1, 0x5a3418, 2); // bridge
+
+  // the strumming arm
+  const hand = pose === "strum1" ? { x: 70, y: 79 } : pose === "strum2" ? { x: 62, y: 102 } : { x: 64, y: 95 };
+  stick(g, 57, 66, hand.x - 2, hand.y - 3, 9, tunic);
+  circle(g, hand.x, hand.y, 6, skin, 3);
+  if (pose === "strum1" || pose === "strum2") {
+    g.lineStyle(3, 0xfff6dc, 0.9);
+    g.beginPath().arc(64, 90, 18, -1.1, 0.9, false).strokePath();
+    g.beginPath().arc(64, 90, 24, -0.9, 0.7, false).strokePath();
+  }
+
+  // head
+  circle(g, 48, 40, 21, hair);
+  circle(g, 55, 42, 19, skin);
+  ellipse(g, 45, 45, 8, 10, skin, 3); // ear
+  g.fillStyle(hair, 1).fillPoints(pts(37, 36, 50, 25, 70, 29, 67, 35, 57, 31, 47, 37, 40, 41), true);
+  if (hurt) {
+    line(g, 59, 37, 67, 45, 3);
+    line(g, 67, 37, 59, 45, 3);
+    ellipse(g, 64, 52, 6, 7, 0x3a0d12, 2);
   } else {
-    stick(g, 64, 84, 92, 56, 6, 0x7a4a24);
-    rrect(g, 88, 48, 12, 10, 3, 0x5a3418, 3);
-    ellipse(g, 58, 88, 32, 26, 0xc07a35);
-    circle(g, 60, 87, 5, OUT, 0);
-    circle(g, 82, 66, 6, skin, 3);
+    ellipse(g, 63, 41, 9, 11, 0xffffff, 2.5);
+    g.fillStyle(0x3a2416, 1).fillCircle(64.6, 42, 3.4);
+    g.fillStyle(0xffffff, 1).fillCircle(65.8, 40.5, 1.4);
+    line(g, 58, 32.5, 67, 31.5, 3, hair);
+    g.lineStyle(2.5, OUT, 1).beginPath().arc(64, 49, 4.5, 0.25, 2.3, false).strokePath();
   }
-  if (pose === "hurt") {
-    g.fillStyle(0xffffff, 0.35).fillRect(0, 0, 110, 140);
-  }
+  g.fillStyle(0xf08a7a, 0.6).fillEllipse(64, 49.5, 8, 4.5);
+  g.fillStyle(0xe8a87c, 1).fillCircle(71, 45, 2.4);
+
+  // floppy cap with a long golden feather
+  poly(g, pts(36, 23, 14, 3, 19, 1, 44, 18), PALETTE.gold, 3);
+  line(g, 18, 3, 40, 21, 1.6, 0xb8902c);
+  ellipse(g, 56, 18, 52, 23, crimson);
+  g.fillStyle(0x9c2832, 1).fillEllipse(66, 21, 26, 13);
+  g.fillStyle(0xd8545c, 1).fillEllipse(46, 13, 16, 6);
+  ellipse(g, 54, 26, 48, 9, 0x7d1f28, 3);
+  g.restore();
 }
 
 // ------------------------------------------------------------------- enemies
@@ -119,7 +169,9 @@ function wolf(g: G, open = false, look: WolfLook = WOLF_LOOKS.forest) {
   poly(g, open ? pts(110, 30, 134, 32, 126, 40, 112, 44, 132, 50, 110, 52) : pts(110, 30, 134, 38, 112, 50), look.snout, 4);
   circle(g, 131, 37, 4, OUT, 0);
   circle(g, 104, 33, 5, look.eye, 3);
-  g.fillStyle(OUT, 1).fillCircle(106, 33, 2);
+  g.fillStyle(OUT, 1).fillCircle(106, 33, 2.2);
+  g.fillStyle(0xffffff, 1).fillCircle(106.8, 31.6, 1);
+  line(g, 97, 27, 109, 28, 3); // angry brow
   if (look.robot) {
     line(g, 96, 20, 92, 4, 3);
     circle(g, 92, 3, 3.5, 0xff4d5e, 2);
@@ -136,6 +188,8 @@ function goblin(g: G) {
   circle(g, 44, 36, 19, 0x7cc25a);
   circle(g, 52, 32, 5, 0xfff07a, 3);
   g.fillStyle(0xc0392b, 1).fillCircle(53, 32, 2.5);
+  g.fillStyle(0xffffff, 1).fillCircle(54, 30.8, 1);
+  g.fillStyle(0xffffff, 1).fillTriangle(47, 46, 50, 46, 48.5, 50).fillTriangle(52, 47, 55, 47, 53.5, 51);
   poly(g, pts(58, 36, 70, 42, 58, 44), 0x6fae4c, 3); // nose
   line(g, 44, 46, 56, 48, 3);
   stick(g, 60, 64, 82, 22, 7, 0x8a5a33); // club
@@ -152,6 +206,7 @@ function troll(g: G, raised = false) {
   ellipse(g, 128, 60, 26, 18, 0x9cb276);
   circle(g, 108, 42, 5, 0xfff07a, 3);
   g.fillStyle(OUT, 1).fillCircle(110, 42, 2.5);
+  g.fillStyle(0xffffff, 1).fillCircle(111, 40.8, 1);
   poly(g, pts(100, 72, 106, 62, 110, 72), 0xf6e7c1, 3); // tusk
   if (raised) {
     stick(g, 130, 100, 150, 20, 12, 0x6b4226);
@@ -172,6 +227,7 @@ function witch(g: G) {
   poly(g, pts(62, 50, 76, 58, 62, 60), 0x8cc266, 3);
   circle(g, 56, 48, 4, 0xffffff, 2);
   g.fillStyle(OUT, 1).fillCircle(57, 48, 2);
+  g.fillStyle(0xffffff, 1).fillCircle(57.6, 47, 0.8);
   g.lineStyle(4, 0xdddddd, 1).lineBetween(36, 46, 30, 70).lineBetween(40, 48, 36, 74);
   ellipse(g, 50, 40, 60, 10, 0x2a1f3d, 4);
   poly(g, pts(30, 38, 70, 38, 60, 4, 54, 0), 0x2a1f3d);
@@ -198,8 +254,9 @@ function bigWolf(g: G, pose: "idle" | "huff" | "hurt", variant: BigWolfLook = "f
     poly(g, pts(56, 206, 78, 206, 67, 240), 0xffb35c, 3);
     poly(g, pts(74, 204, 96, 204, 85, 236), 0x7ff3ff, 3);
   }
-  // tail
-  poly(g, pts(40, 200, 10, 170, 2, 200, 30, 230), fur);
+  // bushy tail, attached at his back
+  poly(g, pts(86, 196, 54, 170, 16, 164, 4, 182, 20, 208, 58, 224, 84, 226), fur);
+  g.fillStyle(furLight, 1).fillPoints(pts(16, 166, 6, 182, 16, 196, 30, 178), true);
   // legs + trousers
   stick(g, 104, 240, 96, 300, 24, L.pants);
   stick(g, 160, 240, 170, 300, 24, L.pants2);
@@ -250,6 +307,7 @@ function bigWolf(g: G, pose: "idle" | "huff" | "hurt", variant: BigWolfLook = "f
   if (variant === "mecha") rrect(g, 138, 62, 46, 22, 8, 0x1b2230, 4); // visor
   circle(g, 160, 74, 9, pose === "hurt" ? 0xffffff : L.eye, 3);
   g.fillStyle(OUT, 1).fillCircle(163, 74, 3.5);
+  g.fillStyle(0xffffff, 1).fillCircle(164.5, 71.5, 1.6);
   if (variant !== "mecha") line(g, 146, 60, 172, 64, 5); // brow
   if (variant === "sand") {
     // turban with a jewel, ears poking out
@@ -381,23 +439,24 @@ function pigHouse(g: G, kind: "straw" | "sticks" | "bricks") {
 }
 
 export function buildTextures(scene: Phaser.Scene) {
-  make(scene, "hero", 110, 140, (g) => hero(g, "idle"));
-  make(scene, "hero_walk", 110, 140, (g) => hero(g, "walk"));
-  make(scene, "hero_attack", 116, 140, (g) => hero(g, "attack"));
-  make(scene, "wolf", 140, 98, (g) => wolf(g));
-  make(scene, "wolf_bite", 140, 98, (g) => wolf(g, true));
-  make(scene, "jackal", 140, 98, (g) => wolf(g, false, WOLF_LOOKS.jackal));
-  make(scene, "jackal_bite", 140, 98, (g) => wolf(g, true, WOLF_LOOKS.jackal));
-  make(scene, "robopup", 140, 98, (g) => wolf(g, false, WOLF_LOOKS.robot));
-  make(scene, "robopup_bite", 140, 98, (g) => wolf(g, true, WOLF_LOOKS.robot));
-  make(scene, "goblin", 96, 100, goblin);
-  make(scene, "troll", 190, 192, (g) => troll(g));
-  make(scene, "troll_raise", 190, 192, (g) => troll(g, true));
-  make(scene, "witch", 100, 144, witch);
+  for (const pose of ["idle", "walk1", "walk2", "walk3", "walk4", "strum1", "strum2", "hurt"] as const) {
+    make(scene, pose === "idle" ? "hero" : `hero_${pose}`, 116, 140, (g) => hero(g, pose), { paper: true });
+  }
+  const paper = { paper: true };
+  make(scene, "wolf", 140, 98, (g) => wolf(g), paper);
+  make(scene, "wolf_bite", 140, 98, (g) => wolf(g, true), paper);
+  make(scene, "jackal", 140, 98, (g) => wolf(g, false, WOLF_LOOKS.jackal), paper);
+  make(scene, "jackal_bite", 140, 98, (g) => wolf(g, true, WOLF_LOOKS.jackal), paper);
+  make(scene, "robopup", 140, 98, (g) => wolf(g, false, WOLF_LOOKS.robot), paper);
+  make(scene, "robopup_bite", 140, 98, (g) => wolf(g, true, WOLF_LOOKS.robot), paper);
+  make(scene, "goblin", 96, 100, goblin, paper);
+  make(scene, "troll", 190, 192, (g) => troll(g), paper);
+  make(scene, "troll_raise", 190, 192, (g) => troll(g, true), paper);
+  make(scene, "witch", 100, 144, witch, paper);
   for (const [key, look] of [["bigwolf", "forest"], ["sandwolf", "sand"], ["mechawolf", "mecha"]] as const) {
-    make(scene, key, 260, 320, (g) => bigWolf(g, "idle", look));
-    make(scene, `${key}_huff`, 260, 320, (g) => bigWolf(g, "huff", look));
-    make(scene, `${key}_hurt`, 260, 320, (g) => bigWolf(g, "hurt", look));
+    make(scene, key, 260, 320, (g) => bigWolf(g, "idle", look), paper);
+    make(scene, `${key}_huff`, 260, 320, (g) => bigWolf(g, "huff", look), paper);
+    make(scene, `${key}_hurt`, 260, 320, (g) => bigWolf(g, "hurt", look), paper);
   }
 
   make(scene, "tree", 230, 302, tree);
@@ -465,7 +524,7 @@ export function buildTextures(scene: Phaser.Scene) {
     // wand with a star
     stick(g, 60, 62, 80, 30, 3, 0xf6e7c1);
     star(g, 80, 26, 10, 0xffe066);
-  });
+  }, paper);
   buildWorldTextures(scene);
   make(scene, "campfire", 140, 120, (g) => {
     stick(g, 20, 104, 120, 90, 10, 0x6b4226);

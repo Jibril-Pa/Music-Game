@@ -1,6 +1,6 @@
 /** Checks the chord-to-slay rules: npx tsx scripts/spells-check.ts */
-import { SYMBOL_SETS, chordMidis, enemyPool, matches, randomSymbols, symbolCountFor, symbolForSongNote } from "@/lib/combat/spells";
-import { demoSong, minGapFor, planFight } from "@/lib/boss/songs";
+import { SYMBOL_SETS, bestChord, chordMidis, enemyPool, fingeringFor, matches, randomSymbols, symbolCountFor, symbolForSongNote } from "@/lib/combat/spells";
+import { chordAt, chordTrack, demoSong, minGapFor, planFight } from "@/lib/boss/songs";
 import { BOSSES, LEVELS, type JourneyLevel } from "@/game/levels";
 
 let failed = 0;
@@ -43,7 +43,37 @@ check("no chord twice in a row on one foe", multi.every((s, i) => i === 0 || s !
 // boss howls
 check("song note F# becomes a D chord", symbolForSongNote("F#", "chords") === "D");
 check("song note B becomes Em", symbolForSongNote("B", "chords") === "Em");
-check("song note C# becomes A in notes mode (nearest open string)", ["A", "D"].includes(symbolForSongNote("C#", "notes")));
+check("notes mode shows the song's real note (C# stays C#)", symbolForSongNote("C#", "notes") === "C#");
+check("every note has a place on the fretboard", ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"].every((n) => (fingeringFor(n, "notes").notes ?? []).length > 0));
+const OPEN = [40, 45, 50, 55, 59, 64];
+check(
+  "...and every place really is that note",
+  ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"].every((n, pc) => (fingeringFor(n, "notes").notes ?? []).every((sp) => (OPEN[6 - sp.string] + sp.fret) % 12 === pc)),
+);
+check("chord diagrams have finger numbers", ["Em", "G", "D", "C", "Am", "A", "E"].every((c) => (fingeringFor(c, "chords").fingers ?? "").length === 6));
+check(
+  "fingers match the shapes (open/x where no finger)",
+  ["Em", "G", "D", "C", "Am", "A", "E"].every((c) => {
+    const f = fingeringFor(c, "chords");
+    return [...(f.shape ?? "")].every((fr, i) => (fr === "0" || fr === "x" ? f.fingers![i] === fr : /[1-4]/.test(f.fingers![i])));
+  }),
+);
+
+// a song's harmony
+const w = new Array(12).fill(0);
+[0, 4, 7].forEach((pc) => (w[pc] = 1));
+check("C E G fits a C chord", bestChord(w, 0).chord === "C");
+const w2 = new Array(12).fill(0);
+[9, 0, 4].forEach((pc) => (w2[pc] = 1));
+check("A C E fits Am", bestChord(w2, 9).chord === "Am");
+const prog: { t: number; dur: number; midi: number; velocity: number }[] = [];
+const PROG: [number, number[]][] = [[0, [48, 52, 55]], [2, [43, 47, 50]], [4, [45, 48, 52]], [6, [41, 45, 48]]]; // C G Am F(->C/Am)
+for (const [bar, midis] of PROG) for (let b = 0; b < 4; b++) for (const m of midis) prog.push({ t: bar * 2 + b * 0.5, dur: 0.45, midi: m + 12, velocity: 90 });
+const grid = Array.from({ length: 32 }, (_, i) => i * 0.5);
+const tr = chordTrack(prog, grid, 16);
+check("chord track follows C -> G -> Am", chordAt(tr, 0.6) === "C" && chordAt(tr, 4.6) === "G" && chordAt(tr, 8.6) === "Am", `${chordAt(tr, 0.6)} ${chordAt(tr, 4.6)} ${chordAt(tr, 8.6)}`);
+const fought = planFight(prog.map((n) => ({ t: n.t, pc: ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][n.midi % 12] })), grid, 120, 16, "chords", tr);
+check("boss howls use the song's chord at that moment", fought.attacks.every((a) => a.symbol === chordAt(tr, a.t)), fought.attacks.map((a) => `${a.t}:${a.symbol}`).join(" "));
 const beats = Array.from({ length: 200 }, (_, i) => i * 0.5);
 const dense = Array.from({ length: 300 }, (_, i) => ({ t: i * 0.25, pc: "E" }));
 for (const mode of ["chords", "notes"] as const) {

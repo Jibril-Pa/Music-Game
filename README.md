@@ -11,6 +11,15 @@ Two parts in one repo:
 ./dev.sh        # then open http://localhost:3000/play (http://localhost:3000 redirects there)
 ```
 
+![The Traveling Bard: title screen](docs/screens/title.png)
+
+**2.5D:** the worlds are real 3D (Three.js): low-poly, cel-shaded and ink-outlined to match the storybook art, with perspective, parallax, soft shadows, fog, a sky with sun or moon, clouds, fireflies, rivers and neon. The characters are 2D paper cut-outs (white paper edge, soft lifted shadow, light from the top-left) standing on the 3D path, like a pop-up book. The 3D camera is computed from the game camera every frame, so the lane the bard walks on lines up exactly while everything behind it has depth (`frontend/src/game/stage/`).
+
+| | | |
+|---|---|---|
+| ![1-1 The troll bridge](docs/screens/1-1-troll-bridge.png) | ![1-2 The Moonlit Wood](docs/screens/1-2-moonlit-beanstalk.png) | ![1-3 The Big Bad Wolf](docs/screens/1-3-big-bad-wolf.png) |
+| ![2-2 The Sphinx](docs/screens/2-2-sphinx.png) | ![2-3 The Wolf of the Dunes](docs/screens/2-3-wolf-of-the-dunes.png) | ![3-2 The Clockwork Nightingale](docs/screens/3-2-clockwork-nightingale.png) |
+
 **The story:** the Big Bad Wolf has stolen the Hourglass of Ages and fled through time. The bard follows him across three worlds. Each world has two walking levels and a boss fight against the wolf; beat him and he escapes through a time portal to the next world. Each level is harder than the last.
 
 | World | Levels | Set pieces | Boss |
@@ -33,12 +42,12 @@ Inspired by Google's *Magic Cat Academy* doodle, with a guitar instead of a mous
 - **Happily Ever After:** slaying fills the magic meter. When it's full, play **E** (major) and every foe on screen vanishes.
 - **Rhythm bonus:** chords on the beat score Perfect (more magic). Wrong chords just fizzle; nothing is punished.
 - **Single notes mode** (title screen) is easier: foes ask for open strings E A D G; B heals, C is the super.
-- **No guitar?** Keys `1`–`7` = Em G C D A Am E. In notes mode, `Z X C V B N` = E G A B D C. Key hints show under each chord when you play with the keyboard.
+- **No guitar?** Keys `1`–`7` = Em G C D A Am E. In notes mode, `Z X C V B N` = E G A B D C, and every note piano-style on the home row: `A`=C `W`=C# `S`=D `E`=D# `D`=E `F`=F `T`=F# `G`=G `Y`=G# `H`=A `U`=A# `J`=B. Key hints show under each chord when you play with the keyboard.
 - **Practice mode** (pause menu or Chord Book) widens the timing, and in chords mode the chord's root note alone also counts.
 - **Bosses:** pick a processed song from the pipeline (or the world's built-in demo).
-  - In *howl* phases, the easy-chart notes become howls carrying a chord (mapped from the song note). Play it as the howl reaches you to parry it back at him.
+  - In *howl* phases, the easy-chart notes become howls on the song's beat. In chords mode each howl carries **the chord the song is playing at that moment**: the song's harmony is worked out beat by beat from every transcribed note (longer, louder and lower notes count more, the song's key breaks ties) and fitted to the seven chords the mic knows. In single-notes mode each howl is **the song's real note** (any of the 12, with where to play it). Play it as the howl reaches you to parry it back at him. `npx tsx scripts/song-chords.ts <jobId>` prints the chords a song will use.
   - In *pack* phases, his pack charges in, the wolf shows his own chord (play it to strike him), and his huff-and-puff gust carries a chord you play to blow it back.
-- **Chord helper:** the chords you need right now (nearest foe first, plus the heal or super chord when it's on offer) sit at the bottom of the screen with their fretboard diagrams, so beginners never have to remember a shape.
+- **Chord helper:** the chords you need right now (the next howl or the nearest foe first, plus the heal or super chord when it's on offer) sit at the bottom of the screen with their fretboard diagrams and finger numbers (1 index … 4 pinky), so beginners never have to remember a shape. Single notes show where to play them (string and fret).
 - `Esc` pauses. The in-game **Chord Book** shows every chord with a fretboard diagram. Headphones work best with the mic; playing out loud through the laptop, tick **Laptop speakers** on the tuning screen or in the pause menu (see below).
 
 ### Note input engine
@@ -60,7 +69,7 @@ Measured with a synthetic guitar through the real pipeline (`/input-test` → *R
 | E then G notes | 20/20 | ~50 ms |
 | chord changes Em G D C Am (0.9 s apart, old strings still ringing) | 9–10 of 10 | ~85 ms |
 
-A real guitar still needs checking: run `/input-test` with yours. The thresholds live at the top of `detector.ts`.
+**On a real guitar recording** (`npx tsx scripts/real-audio-check.ts <jobId> [guitar|input] [--highpass=200] [--ref=twinkle]`, which runs the detector over a WAV from the song pipeline): on the *Twinkle Twinkle* play-along (real guitar, single notes, E major), scored against the true melody, the detector names **97% of the notes it hears correctly** when the guitar is on its own (the backing's bass filtered out), and catches 86% of them. Two real-world fixes came out of this (being folded into `detector.ts`): real plucks rise slower than the synthetic ones the "slow attack" check was tuned on (loosening it catches 93–95% with no extra noise let through), and a bass note sounding under the melody can make it read a deep subharmonic (B4 heard as E), which matters when the game's music leaks from laptop speakers. Try yours on `/input-test`; the thresholds live at the top of `detector.ts`.
 
 ### Listening only to your guitar
 
@@ -85,7 +94,8 @@ Offline benches (from `frontend/`; each takes `--trace`, and `DETECT='{...}'` / 
 - `frontend/src/lib/combat/rhythm.ts`: Perfect/Good windows; practice-mode widths.
 - `frontend/src/game/levels.ts`: the worlds, every level's spawn schedule, set pieces and difficulty, and each boss (HP, howl timing, pack, song).
 - `frontend/src/game/entities/Enemy.ts`: foe speed, damage, base chord count, what casters throw. `scenes/Journey.ts`: the walking levels and their set pieces. `scenes/Boss.ts`: parry window and damage. `scenes/worlds.ts`: how each world looks.
-- `frontend/src/game/art.ts`, `art-worlds.ts`: all the art, drawn in code.
+- `frontend/src/game/art.ts`, `art-worlds.ts`: all the 2D art, drawn in code; `art-kit.ts` gives characters the paper cut-out finish.
+- `frontend/src/game/stage/`: the 2.5D stage. `Stage3D.ts` (renderer and the camera that follows Phaser's), `worlds3d.ts` (the forest, desert and future worlds, set pieces, arenas), `scaffold.ts` (sky, fog, lights and shadows, ground and path, clouds, portal, fireworks), `kit.ts` (toon materials, ink outlines, low-poly props, instancing, particles, water). If WebGL 3D isn't available the scenes fall back to their 2D backdrops.
 - `frontend/src/lib/game-audio/music.ts`: the procedural backing for each world and how it follows the player (`follow()`).
 - `npx tsx scripts/spells-check.ts`: checks the chord-to-slay rules and the level data (difficulty rises level to level).
 - `scripts/playtest-bot.js`: paste into the console on `/play` and it plays the journey with the keyboard, through the portals (set `__botSpeed` / `__botMiss` for a slower, sloppier player). Dev builds expose `window.__game`, `window.__playLevel(i)` (jump to a level), `window.__noteInput()`, and `window.__synthPlay([...])`, which plays synthesized plucks through the mic pipeline.

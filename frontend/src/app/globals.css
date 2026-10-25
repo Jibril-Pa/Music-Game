@@ -449,6 +449,24 @@ button[type="submit"] {
   display: block;
 }
 
+/* 2.5D: the 3D stage canvas sits behind Phaser's transparent canvas.
+   z-index 0 keeps both inside their own stacking context, under the HUD. */
+#game-container {
+  position: relative;
+  z-index: 0;
+}
+
+#game-container canvas.stage3d {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+#game-container canvas:not(.stage3d) {
+  position: relative;
+  z-index: 1;
+}
+
 .game-ui {
   position: absolute;
   inset: 0;
@@ -1364,4 +1382,24 @@ button[type="submit"] {
 .title-row .mode-toggle,
 .title-row .journey-map {
   margin: 0;
+}
+
+.ch-card.howl {
+  background: #e9f1ff;
+}
+
+/* Title: menu on the left, the bard chasing the wolf into the portal on the right. */
+.gm-bottom.gm-raised.title-side {
+  justify-content: flex-start;
+  padding-left: 2.5%;
+  top: 29%;
+}
+
+.title-side .title-panel {
+  max-width: 52%;
+}
+
+.title-side .title-row {
+  flex-direction: column;
+  gap: 0.5em;
 }

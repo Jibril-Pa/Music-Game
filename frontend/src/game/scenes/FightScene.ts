@@ -120,6 +120,10 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
   }
   /** What the super does to a boss. */
   protected onSuperImpact(): void {}
+  /** Symbols coming at the bard on a beat (the boss's howls), soonest first. */
+  protected upcomingSymbols(): string[] {
+    return [];
+  }
 
   get symbols() {
     return SYMBOL_SETS[session.playMode];
@@ -529,7 +533,11 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     if (h.x > this.worldWidth - 40) h.x = this.worldWidth - 40;
     h.tick(now, dt, !blocked && !frozen && this.walkSpeed > 0);
 
-    for (const e of this.enemies) e.tick(now);
+    for (const e of this.enemies) {
+      e.tick(now);
+      e.animate(now);
+    }
+    this.stackBadges();
     this.enemies = this.enemies.filter((e) => e.active);
     this.tickCandies(dt, frozen);
     this.tickFairy(now);
@@ -542,6 +550,24 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     if (now - this.lastFpsAt > 500) {
       this.lastFpsAt = now;
       EventBus.emit(EV.fps, this.game.loop.actualFps);
+    }
+  }
+
+  /** Foes walking close together: stack their chord badges so each stays readable. */
+  private stackBadges() {
+    const placed: { x: number; y: number; hw: number }[] = [];
+    const alive = this.enemies.filter((e) => e.alive).sort((a, b) => a.x - b.x);
+    for (const e of alive) {
+      const hw = Math.max(30, e.badgeHalfWidth);
+      let lift = 0;
+      for (let guard = 0; guard < 4; guard++) {
+        const y = e.badgeY - lift;
+        const hit = placed.some((p) => Math.abs(p.x - e.x) < p.hw + hw + 6 && Math.abs(p.y - y) < 52);
+        if (!hit) break;
+        lift += 56;
+      }
+      e.badgeLift = lift;
+      placed.push({ x: e.x, y: e.badgeY - lift, hw });
     }
   }
 
@@ -575,6 +601,12 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
         seen.add(t.next!);
         out.push({ symbol: t.next!, role: "foe" });
       }
+    }
+    const howl = this.upcomingSymbols()[0];
+    if (howl) {
+      const at = out.findIndex((w) => w.symbol === howl);
+      if (at >= 0) out.splice(at, 1);
+      out.unshift({ symbol: howl, role: "howl" });
     }
     if (this.fairy && !this.fairy.done) out.unshift({ symbol: this.symbols.heal, role: "heal" });
     if (this.hero.magic >= 100) out.unshift({ symbol: this.symbols.super, role: "super" });

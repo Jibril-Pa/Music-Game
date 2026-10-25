@@ -40,7 +40,7 @@ export interface HudState {
   /** ...and the icon at the end of that path. */
   goalIcon?: string;
   /** Chords (or notes) wanted right now, nearest foe first: shown as shapes at the bottom. */
-  wanted?: { symbol: string; role: "foe" | "heal" | "super" }[];
+  wanted?: { symbol: string; role: "foe" | "heal" | "super" | "howl" }[];
   playMode?: "chords" | "notes";
 }
 

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GROUND_Y, flashSprite } from "../fx";
+import { GROUND_Y, flashSprite, restoreTint } from "../fx";
 
 export type WolfState = "idle" | "retreat" | "stalk" | "windup" | "recover" | "huff" | "blow" | "stagger" | "defeated";
 
@@ -27,6 +27,7 @@ export class BigBadWolf extends Phaser.GameObjects.Sprite {
     scene.add.existing(this);
     this.setOrigin(0.5, 1).setDepth(16).setFlipX(true);
     this.shadow = scene.add.image(x, GROUND_Y + 6, "shadow").setDepth(5).setScale(2.4, 1.4);
+    restoreTint(this);
   }
 
   get alive(): boolean {

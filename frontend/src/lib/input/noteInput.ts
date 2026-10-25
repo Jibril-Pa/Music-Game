@@ -3,7 +3,8 @@
  * Emits NoteEvents: one per pluck / strum / key press, never per frame.
  *
  * Keyboard chords: 1=Em 2=G 3=C 4=D 5=A 6=Am 7=E
- * Keyboard notes:  Z=E  X=G  C=A  V=B  B=D  N=C
+ * Keyboard notes:  Z=E  X=G  C=A  V=B  B=D  N=C, and every note piano-style:
+ *                  A=C W=C# S=D E=D# D=E F=F T=F# G=G Y=G# H=A U=A# J=B
  */
 
 import { loadEssentia } from "@/lib/audio/essentia";
@@ -19,6 +20,20 @@ export const KEY_NOTES: Record<string, { pc: PitchClass; midi: number; label: st
   KeyV: { pc: "B", midi: 59, label: "V" },
   KeyB: { pc: "D", midi: 62, label: "B" },
   KeyN: { pc: "C", midi: 60, label: "N" },
+  // Every note, piano-style on the home row (for songs that need sharps):
+  // A=C W=C# S=D E=D# D=E F=F T=F# G=G Y=G# H=A U=A# J=B
+  KeyA: { pc: "C", midi: 60, label: "A" },
+  KeyW: { pc: "C#", midi: 61, label: "W" },
+  KeyS: { pc: "D", midi: 62, label: "S" },
+  KeyE: { pc: "D#", midi: 63, label: "E" },
+  KeyD: { pc: "E", midi: 64, label: "D" },
+  KeyF: { pc: "F", midi: 65, label: "F" },
+  KeyT: { pc: "F#", midi: 66, label: "T" },
+  KeyG: { pc: "G", midi: 67, label: "G" },
+  KeyY: { pc: "G#", midi: 68, label: "Y" },
+  KeyH: { pc: "A", midi: 69, label: "H" },
+  KeyU: { pc: "A#", midi: 70, label: "U" },
+  KeyJ: { pc: "B", midi: 71, label: "J" },
 };
 export const KEY_CHORDS: Record<string, { chord: ChordName; root: PitchClass; label: string }> = {
   Digit1: { chord: "Em", root: "E", label: "1" },

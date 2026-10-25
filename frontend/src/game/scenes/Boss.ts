@@ -21,10 +21,11 @@ import type { NoteEvent } from "@/lib/input/types";
 import { BigBadWolf } from "../entities/BigBadWolf";
 import { EventBus, onBus } from "../EventBus";
 import { EV, type BossSongChoice, type HudState } from "../events";
-import { FONT, GROUND_Y, burst, damageNumber, popup } from "../fx";
+import { FONT, GROUND_Y, burst, damageNumber, light, popup } from "../fx";
 import { BOSSES, isFinalLevel, levelAt, unlockLevel, worldNumber, type BossDef, type WorldId } from "../levels";
 import { session } from "../state";
 import { FightScene, symbolChip, type SymbolTarget } from "./FightScene";
+import { actorTint, showWorld } from "../stage";
 import { bossArena } from "./worlds";
 
 const HOVER_FRACTION = 0.3; // first part of a howl's time it hovers above the wolf
@@ -115,7 +116,10 @@ export class Boss extends FightScene {
   }
 
   protected buildWorld() {
-    bossArena(this, levelAt(session.level).world);
+    const world = levelAt(session.level).world;
+    const in3d = showWorld(this, { world, night: world !== "forest", kind: "arena" });
+    light.tint = in3d ? actorTint() : 0xffffff;
+    if (!in3d) bossArena(this, world);
     this.cameras.main.stopFollow();
   }
 
@@ -402,6 +406,10 @@ export class Boss extends FightScene {
         this.damageWolf(Math.round(PARRY_DAMAGE[session.playMode] * GRADE_DAMAGE[grade]), grade);
       },
     });
+  }
+
+  protected upcomingSymbols(): string[] {
+    return this.orbs.filter((o) => !o.resolved).sort((a, b) => a.hitPerf - b.hitPerf).map((o) => o.attack.symbol);
   }
 
   // ---------------------------------------------------------------- targets

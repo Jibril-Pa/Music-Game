@@ -1,9 +1,10 @@
 import Phaser from "phaser";
 import { EventBus } from "../EventBus";
 import { EV } from "../events";
-import { GROUND_Y, burst, text } from "../fx";
+import { GROUND_Y, burst, light, text } from "../fx";
 import { WORLDS, isFinalLevel, levelAt } from "../levels";
 import { newStats, session } from "../state";
+import { actorTint, showWorld } from "../stage";
 import { staticBackdrop } from "./worlds";
 
 /** After a boss (victory) or any defeat. Buttons are React (EndOverlay). */
@@ -15,11 +16,14 @@ export class End extends Phaser.Scene {
   create(data: { victory: boolean; from: string; level: number }) {
     const level = data.level ?? session.level;
     const lv = levelAt(level);
-    staticBackdrop(this, lv.world, !data.victory);
+    const final = data.victory && isFinalLevel(level);
+    // The final ending is a night of fireworks over the city.
+    const in3d = showWorld(this, { world: lv.world, night: !data.victory || final, kind: "menu", portalX: data.victory && !final ? 1000 : undefined, celebrate: final });
+    light.tint = in3d ? actorTint() : 0xffffff;
+    if (!in3d) staticBackdrop(this, lv.world, !data.victory);
     const stats = session.stats ?? newStats();
     stats.endedAt = performance.now();
     if (data.victory) {
-      const final = isFinalLevel(level);
       this.add.image(640, GROUND_Y, "hero").setOrigin(0.5, 1).setDepth(10).setScale(1.4);
       if (final) {
         this.add.image(760, GROUND_Y - 150, "hourglass").setDepth(11).setScale(1.2);
@@ -27,8 +31,10 @@ export class End extends Phaser.Scene {
         text(this, 640, 210, "The Hourglass of Ages is whole, and every tale is back in its time.", 26, "#fff6dc").setDepth(20);
       } else {
         const next = levelAt(level + 1);
-        const portal = this.add.image(1000, GROUND_Y - 170, "portal").setDepth(6);
-        this.tweens.add({ targets: portal, angle: 360, duration: 5000, repeat: -1 });
+        if (!in3d) {
+          const portal = this.add.image(1000, GROUND_Y - 170, "portal").setDepth(6);
+          this.tweens.add({ targets: portal, angle: 360, duration: 5000, repeat: -1 });
+        }
         text(this, 640, 130, `${WORLDS[lv.world].era}: saved!`, 64, "#ffe066").setDepth(20);
         text(this, 640, 205, `...but the wolf escaped to ${WORLDS[next.world].era}.`, 28, "#fff6dc").setDepth(20);
       }

@@ -94,17 +94,28 @@ export interface Fingering {
   notes?: { string: number; fret: number }[];
   /** Chords: frets from low E to high E, "x" = don't play. */
   shape?: string;
+  /** Chords: which finger presses each string (1 index ... 4 pinky), same layout as `shape`. */
+  fingers?: string;
 }
 
 export const CHORD_SHAPES: Record<string, string> = { Em: "022000", G: "320003", C: "x32010", D: "xx0232", E: "022100", A: "x02220", Am: "x02210" };
+/** The usual beginner fingering for each shape (0 = open, x = not played). */
+export const CHORD_FINGERS: Record<string, string> = { Em: "023000", G: "210003", C: "x32010", D: "xx0132", E: "023100", A: "x01230", Am: "x02310" };
 
+/** Where every note is in the first five frets (string 6 = low E ... 1 = high e). First = easiest. */
 const NOTE_SPOTS: Record<string, { string: number; fret: number }[]> = {
-  E: [{ string: 6, fret: 0 }, { string: 1, fret: 0 }, { string: 4, fret: 2 }],
-  A: [{ string: 5, fret: 0 }, { string: 3, fret: 2 }, { string: 1, fret: 5 }],
-  D: [{ string: 4, fret: 0 }, { string: 2, fret: 3 }, { string: 5, fret: 5 }],
-  G: [{ string: 3, fret: 0 }, { string: 6, fret: 3 }, { string: 1, fret: 3 }],
-  B: [{ string: 2, fret: 0 }, { string: 5, fret: 2 }, { string: 3, fret: 4 }],
   C: [{ string: 2, fret: 1 }, { string: 5, fret: 3 }],
+  "C#": [{ string: 2, fret: 2 }, { string: 5, fret: 4 }],
+  D: [{ string: 4, fret: 0 }, { string: 2, fret: 3 }, { string: 5, fret: 5 }],
+  "D#": [{ string: 4, fret: 1 }, { string: 2, fret: 4 }],
+  E: [{ string: 6, fret: 0 }, { string: 1, fret: 0 }, { string: 4, fret: 2 }],
+  F: [{ string: 1, fret: 1 }, { string: 6, fret: 1 }, { string: 4, fret: 3 }],
+  "F#": [{ string: 1, fret: 2 }, { string: 6, fret: 2 }, { string: 4, fret: 4 }],
+  G: [{ string: 3, fret: 0 }, { string: 6, fret: 3 }, { string: 1, fret: 3 }],
+  "G#": [{ string: 3, fret: 1 }, { string: 6, fret: 4 }, { string: 1, fret: 4 }],
+  A: [{ string: 5, fret: 0 }, { string: 3, fret: 2 }, { string: 1, fret: 5 }],
+  "A#": [{ string: 5, fret: 1 }, { string: 3, fret: 3 }],
+  B: [{ string: 2, fret: 0 }, { string: 5, fret: 2 }, { string: 3, fret: 4 }],
 };
 
 const OPEN_STRINGS = [40, 45, 50, 55, 59, 64]; // low E .. high E
@@ -117,7 +128,34 @@ export function chordMidis(name: string): number[] {
 }
 
 export function fingeringFor(symbol: string, mode: PlayMode): Fingering {
-  return mode === "chords" ? { label: symbol, shape: CHORD_SHAPES[symbol] } : { label: symbol, notes: NOTE_SPOTS[symbol] };
+  // A chord name or a note name decides it (boss songs can ask for any note).
+  if (CHORD_SHAPES[symbol] && (mode === "chords" || !NOTE_SPOTS[symbol])) return { label: symbol, shape: CHORD_SHAPES[symbol], fingers: CHORD_FINGERS[symbol] };
+  return { label: symbol, notes: NOTE_SPOTS[symbol] };
+}
+
+const CHORD_PCS: Record<string, number[]> = { Em: [4, 7, 11], G: [7, 11, 2], D: [2, 6, 9], C: [0, 4, 7], Am: [9, 0, 4], A: [9, 1, 4], E: [4, 8, 11] };
+
+/**
+ * The chord (from `pool`) that best fits a moment of a song, given how much
+ * of each pitch class sounds then (weights[0] = C ... weights[11] = B) and
+ * the lowest note. Notes outside the chord count against it.
+ */
+export function bestChord(weights: number[], bass: number | null, pool: string[] = SYMBOL_SETS.chords.enemy, key?: number[]): { chord: string; score: number } {
+  let best = { chord: pool[0], score: -Infinity };
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
+  for (const name of pool) {
+    const tones = CHORD_PCS[name];
+    let inside = 0;
+    for (const pc of tones) inside += weights[pc];
+    const outside = total - inside;
+    let score = (inside - 0.7 * outside) / total;
+    if (bass !== null && bass === tones[0]) score += 0.25;
+    else if (bass !== null && tones.includes(bass)) score += 0.08;
+    // The song's key breaks ties (E vs Em when the bar has no third).
+    if (key) score += 0.3 * (tones.reduce((a, pc) => a + key[pc], 0) / tones.length);
+    if (score > best.score) best = { chord: name, score };
+  }
+  return best;
 }
 
 /** Boss howls: a song note becomes the closest playable symbol. */
@@ -128,6 +166,8 @@ const PC_INDEX: Record<string, number> = { C: 0, "C#": 1, D: 2, "D#": 3, E: 4, F
 
 export function symbolForSongNote(pc: string, mode: PlayMode): string {
   if (mode === "chords") return NOTE_TO_CHORD[pc] ?? "Em";
+  // Single notes: the song's real note (any of the 12; the helper shows where it is).
+  if (PC_INDEX[pc] !== undefined) return pc;
   const i = PC_INDEX[pc] ?? 4;
   let best = "E";
   let bestD = 99;

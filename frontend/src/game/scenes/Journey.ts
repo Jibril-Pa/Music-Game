@@ -13,10 +13,11 @@ import { ProceduralMusic } from "@/lib/game-audio/music";
 import type { Enemy, EnemyKind } from "../entities/Enemy";
 import { EventBus } from "../EventBus";
 import { EV, type HudState } from "../events";
-import { GROUND_Y, burst, popup } from "../fx";
+import { GROUND_Y, burst, light, popup } from "../fx";
 import { LEVELS, WORLDS, levelAt, sceneFor, unlockLevel, type JourneyLevel, type SetPiece, type Spawn } from "../levels";
 import { session } from "../state";
 import { FightScene } from "./FightScene";
+import { actorTint, showWorld } from "../stage";
 import { THEMES, endSign, scatterProps, scrollingBackdrop } from "./worlds";
 
 interface Blocker {
@@ -28,7 +29,8 @@ interface Blocker {
 
 export class Journey extends FightScene {
   private level!: JourneyLevel;
-  private backdrop!: ReturnType<typeof scrollingBackdrop>;
+  /** 2D fallback backdrop (only when 3D isn't available). */
+  private backdrop: ReturnType<typeof scrollingBackdrop> | null = null;
   private schedule: (Spawn & { done: boolean })[] = [];
   private blocker: Blocker | null = null;
   private leaving = false;
@@ -75,6 +77,10 @@ export class Journey extends FightScene {
 
   protected buildWorld() {
     const lv = this.level;
+    const in3d = showWorld(this, { world: lv.world, night: lv.night, kind: "journey", length: lv.length, landmarks: lv.landmarks, goal: lv.goal.sign });
+    light.tint = in3d ? actorTint() : 0xffffff;
+    this.backdrop = null;
+    if (in3d) return;
     this.backdrop = scrollingBackdrop(this, lv.world, lv.night);
     scatterProps(this, lv.world, lv.night, this.worldWidth, Object.values(lv.landmarks));
     this.buildLandmarks();
@@ -107,7 +113,7 @@ export class Journey extends FightScene {
   }
 
   protected tickScene(_now: number, dt: number) {
-    this.backdrop.scroll(this.cameras.main, dt);
+    this.backdrop?.scroll(this.cameras.main, dt);
     if (this.ended || this.leaving) return;
 
     const hx = this.hero.x;

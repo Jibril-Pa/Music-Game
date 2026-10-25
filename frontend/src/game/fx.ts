@@ -6,6 +6,15 @@ import type { Grade } from "@/lib/combat/rhythm";
 export const FONT = 'Georgia, "Iowan Old Style", "Palatino Linotype", serif';
 export const GROUND_Y = 600;
 
+/** The light the 2D characters stand in (set by each scene from its 3D world: moonlight, dusk...). */
+export const light = { tint: 0xffffff };
+
+/** Back to the world's light after a flash. */
+export function restoreTint(s: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image) {
+  if (light.tint === 0xffffff) s.clearTint();
+  else s.setTint(light.tint);
+}
+
 const GRADE_COLOR: Record<Grade, string> = { perfect: "#ffd23f", good: "#ffffff", off: "#c9c9c9" };
 
 export function text(scene: Phaser.Scene, x: number, y: number, s: string, size: number, color: string, stroke = "#2b1a12") {
@@ -57,5 +66,5 @@ export function burst(
 
 export function flashSprite(scene: Phaser.Scene, s: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image, color = 0xffffff, ms = 80) {
   s.setTintFill(color);
-  scene.time.delayedCall(ms, () => s.active && s.clearTint());
+  scene.time.delayedCall(ms, () => s.active && restoreTint(s));
 }

@@ -1,9 +1,10 @@
 import Phaser from "phaser";
 import { EventBus, onBus } from "../EventBus";
 import { EV } from "../events";
-import { GROUND_Y, burst, text } from "../fx";
+import { GROUND_Y, burst, light, text } from "../fx";
 import { levelAt, sceneFor } from "../levels";
 import { session } from "../state";
+import { actorTint, showWorld } from "../stage";
 import { staticBackdrop } from "./worlds";
 
 /** "Tune your lute" by the campfire. The tuner UI is React (TuneOverlay). */
@@ -13,7 +14,10 @@ export class Tune extends Phaser.Scene {
   }
 
   create() {
-    staticBackdrop(this, levelAt(session.level).world, true);
+    const world = levelAt(session.level).world;
+    const in3d = showWorld(this, { world, night: true, kind: "menu", campfireX: 760 });
+    light.tint = in3d ? actorTint() : 0xffffff;
+    if (!in3d) staticBackdrop(this, world, true);
     const fire = this.add.image(760, GROUND_Y + 6, "campfire").setOrigin(0.5, 1).setDepth(5);
     this.tweens.add({ targets: fire, scaleY: 1.08, duration: 180, yoyo: true, repeat: -1 });
     this.add.circle(760, GROUND_Y - 40, 160, 0xffb35c, 0.12).setDepth(4);

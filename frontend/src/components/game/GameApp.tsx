@@ -150,6 +150,8 @@ export default function GameApp() {
   // can slip in during a level change and leave the scene frozen).
   useEffect(() => {
     const onVis = () => {
+      // Dev only: window.__noAutoPause = true keeps playing in a hidden tab (screenshots, bots).
+      if (process.env.NODE_ENV !== "production" && (window as unknown as { __noAutoPause?: boolean }).__noAutoPause) return;
       if (document.hidden && FIGHT_SCENES.has(scene) && !session.paused) setPaused(true);
       else if (!document.hidden && !session.paused) EventBus.emit(EV.setPaused, false);
     };

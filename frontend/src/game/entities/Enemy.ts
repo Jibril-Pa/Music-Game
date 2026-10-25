@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { FONT, GROUND_Y, flashSprite } from "../fx";
+import { FONT, GROUND_Y, flashSprite, light, restoreTint } from "../fx";
 
 export type EnemyKind =
   // Once Upon a Time
@@ -116,6 +116,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private readonly pace: number;
   /** Set pieces react when it's played away (the cave door opens...). */
   onSlain: (() => void) | null = null;
+  /** Raise the chord badge this much (px) so it doesn't cover a neighbour's. */
+  badgeLift = 0;
+  private lift = 0;
   private badge: Phaser.GameObjects.Container;
   private baseY = GROUND_Y;
 
@@ -145,6 +148,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.y = this.baseY;
     }
     this.shadow = scene.add.image(x, GROUND_Y + 4, "shadow").setDepth(5).setScale((this.def.body[0] / 100) * 1.1, 1);
+    restoreTint(this);
     this.badge = scene.add.container(x, 0).setDepth(45);
     this.renderBadge();
     this.nextThrowAt = scene.time.now + 1200;
@@ -160,6 +164,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   get hitHeight(): number {
     return this.def.body[1];
+  }
+
+  /** Where the chord badge sits before any lift. */
+  get badgeY(): number {
+    return this.y - this.def.body[1] - 40;
+  }
+
+  /** Half the width of the badge row (for stacking). */
+  get badgeHalfWidth(): number {
+    return this.badge.getBounds().width / 2;
   }
 
   get body2(): Phaser.Physics.Arcade.Body {
@@ -211,6 +225,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.scene.tweens.add({ targets: b, scale: 1, duration: 160, ease: "Back.Out" });
   }
 
+  /**
+   * Paper-cutout life: a waddle while walking, a slow sway when standing,
+   * a tilt for flyers. Rotation only, so physics isn't affected.
+   */
+  animate(now: number) {
+    if (!this.alive || this.def.stationary) return;
+    const body = this.body2;
+    const ph = now / 1000 + this.id * 0.37;
+    let target: number;
+    if (this.flying) target = Math.sin(ph * 3.2) * 4;
+    else if (this.state === "windup") target = -6;
+    else if (Math.abs(body.velocity.x) > 8 && (body.blocked.down || body.touching.down)) target = Math.sin(ph * 11) * 6;
+    else target = Math.sin(ph * 2.2) * 1.5;
+    this.angle += (target - this.angle) * 0.35;
+  }
+
   /** One matching chord: pops the next symbol. Returns true if that slew it. */
   hit(now: number): boolean {
     if (!this.alive || !this.symbols.length) return false;
@@ -223,7 +253,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.renderBadge();
     this.state = "hurt";
     this.stateUntil = now + 320;
-    this.clearTint();
+    restoreTint(this);
     this.setTexture(this.def.texture);
     if (!this.def.ranged && !this.def.stationary) this.setVelocity(260 / this.def.weight, -160 / Math.sqrt(this.def.weight));
     return false;
@@ -258,7 +288,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!this.alive) return;
     const body = this.body2;
     this.shadow.setPosition(this.x, GROUND_Y + 4);
-    this.badge.setPosition(this.x, this.y - this.def.body[1] - 40);
+    this.lift += (this.badgeLift - this.lift) * 0.25;
+    this.badge.setPosition(this.x, this.badgeY - this.lift);
     if (this.host.isFrozen()) return;
 
     const hero = this.host.hero;
@@ -296,9 +327,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     if (this.state === "windup") {
       this.setVelocityX(0);
-      this.setTint(Math.floor(now / 80) % 2 ? 0xffb066 : 0xffffff);
+      this.setTint(Math.floor(now / 80) % 2 ? 0xffb066 : light.tint);
       if (now >= this.stateUntil) {
-        this.clearTint();
+        restoreTint(this);
         if (Math.abs(dx) <= this.def.contactRange + 50) {
           this.host.sfx(this.def.heavy ? "smash" : "bite");
           if (this.def.heavy) this.scene.cameras.main.shake(180, 0.01);

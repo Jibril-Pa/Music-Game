@@ -11,13 +11,13 @@ export default function Fretboard({ fingering, size = 1 }: { fingering: Fingerin
   const top = 10 * size;
   const sx = (w - left - 8 * size) / frets;
   const sy = (h - top * 2) / 5;
-  const marks: { string: number; fret: number; main: boolean }[] = [];
+  const marks: { string: number; fret: number; main: boolean; finger?: string }[] = [];
   const muted: number[] = [];
   if (fingering.shape) {
     [...fingering.shape].forEach((f, i) => {
       const string = 6 - i; // shape is low E -> high E
       if (f === "x") muted.push(string);
-      else marks.push({ string, fret: Number(f), main: true });
+      else marks.push({ string, fret: Number(f), main: true, finger: fingering.fingers?.[i] });
     });
   } else {
     (fingering.notes ?? []).forEach((n, i) => marks.push({ ...n, main: i === 0 }));
@@ -50,8 +50,20 @@ export default function Fretboard({ fingering, size = 1 }: { fingering: Fingerin
         m.fret === 0 ? (
           <circle key={i} cx={x(0)} cy={y(m.string)} r={5 * size} fill="none" stroke={m.main ? "#c8553d" : "#c8553d88"} strokeWidth={2.5} />
         ) : (
-          <circle key={i} cx={x(m.fret)} cy={y(m.string)} r={6 * size} fill={m.main ? "#c8553d" : "#c8553d66"} stroke="#2b1a12" strokeWidth={1.5} />
+          <g key={i}>
+            <circle cx={x(m.fret)} cy={y(m.string)} r={6.5 * size} fill={m.main ? "#c8553d" : "#c8553d66"} stroke="#2b1a12" strokeWidth={1.5} />
+            {m.finger && /[1-4]/.test(m.finger) && (
+              <text x={x(m.fret)} y={y(m.string) + 3.4 * size} fontSize={9.5 * size} fontWeight="bold" fill="#fff6dc" textAnchor="middle">
+                {m.finger}
+              </text>
+            )}
+          </g>
         ),
+      )}
+      {fingering.notes && fingering.notes[0] && (
+        <text x={w - 10 * size} y={h - 2 * size} fontSize={9 * size} fill="#6b4226" textAnchor="end">
+          {fingering.notes[0].fret === 0 ? "open string" : `fret ${fingering.notes[0].fret}`}
+        </text>
       )}
     </svg>
   );

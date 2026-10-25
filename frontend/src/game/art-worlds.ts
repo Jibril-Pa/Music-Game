@@ -95,6 +95,7 @@ function scorpion(g: G, strike = false) {
   stick(g, 104, 68, 118, 76, 6, shell);
   ellipse(g, 124, 78, 18, 11, shell, 4);
   g.fillStyle(OUT, 1).fillCircle(106, 56, 3).fillCircle(112, 58, 2.5);
+  g.fillStyle(0xffffff, 1).fillCircle(106.8, 55, 1).fillCircle(112.6, 57.2, 0.8);
 }
 
 function thief(g: G, swing = false) {
@@ -109,7 +110,10 @@ function thief(g: G, swing = false) {
   g.fillStyle(0xc0392b, 1).fillRect(30, 84, 44, 10);
   g.lineStyle(3, OUT, 1).strokeRect(30, 84, 44, 10);
   circle(g, 56, 36, 16, skin);
-  g.fillStyle(OUT, 1).fillCircle(63, 35, 2.5);
+  circle(g, 62.5, 34.5, 3.8, 0xffffff, 2);
+  g.fillStyle(OUT, 1).fillCircle(63.5, 35, 2);
+  g.fillStyle(0xffffff, 1).fillCircle(64.2, 33.8, 0.8);
+  line(g, 58, 29.5, 67, 30, 2.5, 0x2a1a10);
   poly(g, pts(56, 44, 70, 42, 66, 48), 0x2a1a10, 0);
   ellipse(g, 54, 24, 42, 22, 0xf2efe6);
   ellipse(g, 54, 18, 30, 14, 0xe4ddcc, 3);
@@ -520,20 +524,20 @@ function songNote(g: G) {
 
 export function buildWorldTextures(scene: Phaser.Scene) {
   // Moonlit Wood
-  make(scene, "giant", 236, 262, (g) => giant(g));
-  make(scene, "giant_raise", 236, 262, (g) => giant(g, true));
+  make(scene, "giant", 236, 262, (g) => giant(g), { paper: true });
+  make(scene, "giant_raise", 236, 262, (g) => giant(g, true), { paper: true });
   make(scene, "beanstalk", 180, 720, beanstalk);
 
   // Shifting Sands
-  make(scene, "scorpion", 140, 92, (g) => scorpion(g));
-  make(scene, "scorpion_strike", 140, 92, (g) => scorpion(g, true));
-  make(scene, "thief", 120, 132, (g) => thief(g));
-  make(scene, "thief_swing", 120, 132, (g) => thief(g, true));
-  make(scene, "mummy", 104, 144, mummy);
-  make(scene, "djinn", 124, 168, djinn);
-  make(scene, "cave_door", 160, 184, caveDoor);
+  make(scene, "scorpion", 140, 92, (g) => scorpion(g), { paper: true });
+  make(scene, "scorpion_strike", 140, 92, (g) => scorpion(g, true), { paper: true });
+  make(scene, "thief", 120, 132, (g) => thief(g), { paper: true });
+  make(scene, "thief_swing", 120, 132, (g) => thief(g, true), { paper: true });
+  make(scene, "mummy", 104, 144, mummy, { paper: true });
+  make(scene, "djinn", 124, 168, djinn, { paper: true });
+  make(scene, "cave_door", 160, 184, caveDoor, { paper: true });
   make(scene, "cave", 480, 352, cave);
-  make(scene, "sphinx", 330, 236, sphinx);
+  make(scene, "sphinx", 330, 236, sphinx, { paper: true });
   make(scene, "palm", 220, 310, palm);
   make(scene, "rock", 130, 80, rock);
   make(scene, "urn", 70, 92, urn);
@@ -545,13 +549,13 @@ export function buildWorldTextures(scene: Phaser.Scene) {
   make(scene, "pyramids", 1280, 420, (g) => pyramids(g, 1280, 420, 0xe9c78a, 0xd2a868));
 
   // Clockwork City
-  make(scene, "drone", 104, 84, drone);
-  make(scene, "tinsoldier", 92, 156, tinSoldier);
-  make(scene, "mech", 210, 206, (g) => mech(g));
-  make(scene, "mech_raise", 210, 206, (g) => mech(g, true));
-  make(scene, "turret", 124, 130, turret);
-  make(scene, "laser_gate", 170, 310, laserGate);
-  make(scene, "nightingale", 252, 184, nightingale);
+  make(scene, "drone", 104, 84, drone, { paper: true });
+  make(scene, "tinsoldier", 92, 156, tinSoldier, { paper: true });
+  make(scene, "mech", 210, 206, (g) => mech(g), { paper: true });
+  make(scene, "mech_raise", 210, 206, (g) => mech(g, true), { paper: true });
+  make(scene, "turret", 124, 130, turret, { paper: true });
+  make(scene, "laser_gate", 170, 310, laserGate, { paper: true });
+  make(scene, "nightingale", 252, 184, nightingale, { paper: true });
   make(scene, "lamp", 70, 310, lamp);
   make(scene, "holo_sign", 180, 230, holoSign);
   make(scene, "crate", 84, 70, crate);

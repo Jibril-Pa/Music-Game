@@ -13,7 +13,7 @@
 import type { Chart } from "@/lib/pipeline";
 import { API_BASE, fileUrl } from "@/lib/pipeline";
 import { BufferSong, ProceduralMusic, type MusicWorld, type SongClock } from "@/lib/game-audio/music";
-import { chordMidis, symbolForSongNote, type PlayMode } from "@/lib/combat/spells";
+import { bestChord, chordMidis, symbolForSongNote, type PlayMode } from "@/lib/combat/spells";
 
 export interface Attack {
   /** Song seconds. */
@@ -53,7 +53,75 @@ export function minGapFor(mode: PlayMode, bpm: number): number {
   return mode === "chords" ? Math.max(1.05, period * 1.9) : Math.max(0.5, period * 0.95);
 }
 
-export function planFight(notes: { t: number; pc: string }[], beats: number[], bpm: number, duration: number, mode: PlayMode): { attacks: Attack[]; phases: Phase[] } {
+export interface ChordStep {
+  t: number;
+  chord: string;
+}
+
+/**
+ * The song's harmony, beat by beat, fitted to the game's chords: every
+ * transcribed note sounding in a beat counts (longer, louder and lower notes
+ * count more), and the chord only changes when another one fits clearly better.
+ */
+export function chordTrack(notes: { t: number; dur?: number; midi: number; velocity?: number }[], beats: number[], duration: number): ChordStep[] {
+  const grid = beats.length ? beats : [0];
+  const track: ChordStep[] = [];
+  let prev: string | null = null;
+  // The key: how much each pitch class sounds over the whole song (0..1).
+  const key: number[] = new Array(12).fill(0);
+  for (const n of notes) key[n.midi % 12] += Math.max(n.dur ?? 0.25, 0.08) * ((n.velocity ?? 80) / 127);
+  const keyMax = Math.max(...key) || 1;
+  for (let i = 0; i < 12; i++) key[i] /= keyMax;
+  for (let i = 0; i < grid.length; i++) {
+    const t0 = grid[i];
+    const t1 = i + 1 < grid.length ? grid[i + 1] : Math.min(duration, t0 + 0.5);
+    const w: number[] = new Array(12).fill(0);
+    let bass: number | null = null;
+    for (const n of notes) {
+      const a = Math.max(t0, n.t);
+      const b = Math.min(t1, n.t + Math.max(n.dur ?? 0.25, 0.08));
+      if (b <= a) continue;
+      w[n.midi % 12] += (b - a) * ((n.velocity ?? 80) / 127) * (n.midi < 55 ? 1.6 : 1);
+      if (bass === null || n.midi < bass) bass = n.midi;
+    }
+    if (w.every((x) => x < 1e-4)) {
+      track.push({ t: t0, chord: prev ?? "Em" });
+      continue;
+    }
+    const bassPc = bass === null ? null : bass % 12;
+    // All seven chords the mic knows: songs in E or A major need the major ones.
+    const best = bestChord(w, bassPc, SONG_CHORDS, key);
+    if (prev && prev !== best.chord && bestChord(w, bassPc, [prev], key).score > best.score - 0.12) {
+      track.push({ t: t0, chord: prev });
+      continue;
+    }
+    prev = best.chord;
+    track.push({ t: t0, chord: best.chord });
+  }
+  return track;
+}
+
+/** The chord sounding at song time `t`. */
+export function chordAt(track: ChordStep[], t: number): string {
+  let lo = 0;
+  let hi = track.length - 1;
+  if (hi < 0) return "Em";
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (track[mid].t <= t + 0.05) lo = mid;
+    else hi = mid - 1;
+  }
+  return track[lo].chord;
+}
+
+const CHORD_ROOT: Record<string, string> = { Em: "E", G: "G", D: "D", C: "C", Am: "A", A: "A", E: "E" };
+const SONG_CHORDS = ["Em", "G", "D", "C", "Am", "A", "E"];
+
+/**
+ * Howls from a song. `track` (the song's harmony) makes chord howls match what
+ * the music is playing at that moment; single-note howls are the song's real notes.
+ */
+export function planFight(notes: { t: number; pc: string }[], beats: number[], bpm: number, duration: number, mode: PlayMode, track?: ChordStep[]): { attacks: Attack[]; phases: Phase[] } {
   const grid = fullGrid(beats, bpm, duration);
   const period = 60 / bpm;
   const minGap = minGapFor(mode, bpm);
@@ -79,7 +147,8 @@ export function planFight(notes: { t: number; pc: string }[], beats: number[], b
     const picked: Attack[] = [];
     for (const n of usable) {
       if (picked.length && n.t - picked[picked.length - 1].t < minGap) continue;
-      picked.push({ t: n.t, symbol: symbolForSongNote(n.pc, mode) });
+      const symbol = mode === "chords" && track ? chordAt(track, n.t) : symbolForSongNote(n.pc, mode);
+      picked.push({ t: n.t, symbol });
     }
     // Sparse chart (quiet guitar, intro...): add riff howls on the beat.
     if (picked.length < 4) {
@@ -87,7 +156,9 @@ export function planFight(notes: { t: number; pc: string }[], beats: number[], b
         const beatIdx = Math.round((t - ph.start) / period);
         if (beatIdx % step) continue;
         if (picked.some((p) => Math.abs(p.t - t) < minGap)) continue;
-        picked.push({ t, symbol: riff[riffI++ % riff.length] });
+        // On the song's own harmony when we know it (the chord, or its root note).
+        const fromSong = track ? chordAt(track, t) : null;
+        picked.push({ t, symbol: fromSong ? (mode === "chords" ? fromSong : CHORD_ROOT[fromSong] ?? "E") : riff[riffI++ % riff.length] });
       }
       picked.sort((x, y) => x.t - y.t);
     }
@@ -123,7 +194,9 @@ export async function loadJobSong(jobId: string, mode: PlayMode, signal?: AbortS
   const chart = (await res.json()) as Chart;
   const clock = await BufferSong.load(fileUrl(jobId, "backing.mp3"), chart.beats, chart.song.bpm, signal);
   const notes = chart.difficulties.easy.map((n) => ({ t: n.t, pc: n.name.replace(/-?\d+$/, "") }));
-  const { attacks, phases } = planFight(notes, chart.beats, chart.song.bpm, clock.duration, mode);
+  // The harmony from every transcribed note (the hard chart has the most).
+  const track = chordTrack(chart.difficulties.hard ?? chart.difficulties.easy, chart.beats, clock.duration);
+  const { attacks, phases } = planFight(notes, chart.beats, chart.song.bpm, clock.duration, mode, track);
   return { title: chart.song.title, source: "job", bpm: chart.song.bpm, duration: clock.duration, clock, attacks, phases };
 }
 

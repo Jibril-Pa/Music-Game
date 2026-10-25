@@ -17,13 +17,79 @@ export const pts = (...xy: number[]): P[] => {
   return out;
 };
 
-/** Draws once into a texture (skipped if it already exists). */
-export function make(scene: Phaser.Scene, key: string, w: number, h: number, draw: (g: G) => void) {
+/** Room around "paper" sprites for their white cut-out edge (left, right and top; feet stay on the bottom). */
+export const PAPER_PAD = 8;
+
+/**
+ * Draws once into a texture (skipped if it already exists). `paper` gives a
+ * character the 2.5D storybook finish: soft light from the top-left, a white
+ * paper edge and a lifted shadow, so it reads as a cut-out standing in the
+ * 3D world.
+ */
+export function make(scene: Phaser.Scene, key: string, w: number, h: number, draw: (g: G) => void, opts: { paper?: boolean } = {}) {
   if (scene.textures.exists(key)) return;
+  const pad = opts.paper ? PAPER_PAD : 0;
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
+  if (pad) g.translateCanvas(pad, pad);
   draw(g);
-  g.generateTexture(key, w, h);
+  g.generateTexture(key, w + pad * 2, h + pad);
   g.destroy();
+  if (pad) paperize(scene, key);
+}
+
+function silhouette(src: HTMLCanvasElement, color: string): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = src.width;
+  c.height = src.height;
+  const x = c.getContext("2d")!;
+  x.drawImage(src, 0, 0);
+  x.globalCompositeOperation = "source-in";
+  x.fillStyle = color;
+  x.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+
+function paperize(scene: Phaser.Scene, key: string) {
+  const tex = scene.textures.get(key);
+  const src = tex.getSourceImage() as HTMLCanvasElement;
+  if (typeof HTMLCanvasElement === "undefined" || !(src instanceof HTMLCanvasElement)) return;
+  const ctx = src.getContext("2d");
+  if (!ctx) return;
+  const w = src.width;
+  const h = src.height;
+  const orig = document.createElement("canvas");
+  orig.width = w;
+  orig.height = h;
+  orig.getContext("2d")!.drawImage(src, 0, 0);
+  // Volume: light from the top-left, shade towards the bottom-right.
+  ctx.save();
+  ctx.globalCompositeOperation = "source-atop";
+  const grad = ctx.createLinearGradient(0, 0, w * 0.9, h);
+  grad.addColorStop(0, "rgba(255,247,228,0.22)");
+  grad.addColorStop(0.5, "rgba(255,247,228,0)");
+  grad.addColorStop(1, "rgba(36,18,64,0.24)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+  // Behind the art: white paper edge, a faint dark rim, a soft lifted shadow.
+  const white = silhouette(orig, "#fffaf0");
+  const dark = silhouette(orig, "#1e0f0a");
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-over";
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    ctx.drawImage(white, Math.cos(a) * 3.3, Math.sin(a) * 3.3);
+  }
+  ctx.globalAlpha = 0.3;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    ctx.drawImage(dark, Math.cos(a) * 4.6, Math.sin(a) * 4.6);
+  }
+  ctx.globalAlpha = 0.2;
+  ctx.filter = "blur(2px)";
+  ctx.drawImage(dark, 5, 3);
+  ctx.restore();
+  (tex as Phaser.Textures.CanvasTexture).refresh();
 }
 
 // Outlined primitives ----------------------------------------------------------

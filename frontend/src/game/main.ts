@@ -13,7 +13,8 @@ const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: GAME_WIDTH,
   height: GAME_HEIGHT,
-  backgroundColor: "#1d2a1f",
+  // Transparent: the 3D stage (stage/) is drawn on a canvas behind this one.
+  transparent: true,
   physics: { default: "arcade", arcade: { gravity: { x: 0, y: 1800 }, debug: false } },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   fps: { target: 60 },

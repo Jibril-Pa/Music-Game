@@ -1,70 +1,92 @@
+import { memo } from "react";
 import type { Fingering } from "@/lib/combat/spells";
 
-const STRING_NAMES = ["e", "B", "G", "D", "A", "E"]; // string 1 (top) .. 6
+/**
+ * A songbook chord box: vertical, low E on the left, the nut on top, finger
+ * numbers in the dots. Sized in em by CSS (.fb-now / .fb-mini / .fb-book), so
+ * it scales with the game frame; colours come from CSS classes (tokens).
+ *   now:  the card at the bard's feet (finger digits, string names)
+ *   mini: the next-up strip (shapes only)
+ *   book: the Chord Book cards
+ */
+export type FretboardVariant = "now" | "mini" | "book";
 
-/** Small SVG fretboard: strings drawn like tab (high e on top), frets 0-5. */
-export default function Fretboard({ fingering, size = 1 }: { fingering: Fingering; size?: number }) {
-  const frets = 5;
-  const w = 170 * size;
-  const h = 92 * size;
-  const left = 26 * size;
-  const top = 10 * size;
-  const sx = (w - left - 8 * size) / frets;
-  const sy = (h - top * 2) / 5;
-  const marks: { string: number; fret: number; main: boolean; finger?: string }[] = [];
-  const muted: number[] = [];
+const STRING_NAMES = ["E", "A", "D", "G", "B", "e"]; // i 0 = low E ... 5 = high e
+const STRING_WORDS = ["low E", "A", "D", "G", "B", "high e"];
+
+const x = (i: number) => 14 + i * 20;
+
+interface Mark {
+  /** String index, 0 = low E. */
+  i: number;
+  fret: number | "x";
+  finger?: string;
+}
+
+function marksOf(fingering: Fingering): Mark[] {
   if (fingering.shape) {
-    [...fingering.shape].forEach((f, i) => {
-      const string = 6 - i; // shape is low E -> high E
-      if (f === "x") muted.push(string);
-      else marks.push({ string, fret: Number(f), main: true, finger: fingering.fingers?.[i] });
-    });
-  } else {
-    (fingering.notes ?? []).forEach((n, i) => marks.push({ ...n, main: i === 0 }));
+    return [...fingering.shape].map((f, i) => ({ i, fret: f === "x" ? "x" : Number(f), finger: fingering.fingers?.[i] }));
   }
-  const y = (string: number) => top + (string - 1) * sy;
-  const x = (fret: number) => (fret === 0 ? left - 12 * size : left + (fret - 0.5) * sx);
+  // Single notes: only the main (easiest) position. string 6 = low E -> i 0.
+  const n = fingering.notes?.[0];
+  return n ? [{ i: 6 - n.string, fret: n.fret }] : [];
+}
+
+function labelOf(fingering: Fingering, marks: Mark[]): string {
+  if (fingering.shape) return `${fingering.label} chord shape`;
+  const m = marks[0];
+  if (!m || m.fret === "x") return fingering.label;
+  const string = STRING_WORDS[m.i];
+  return m.fret === 0 ? `${fingering.label}: open ${string} string` : `${fingering.label}: fret ${m.fret} on the ${string} string`;
+}
+
+function Fretboard({ fingering, variant = "now" }: { fingering: Fingering; variant?: FretboardVariant }) {
+  const mini = variant === "mini";
+  const marks = marksOf(fingering);
+  const highest = Math.max(0, ...marks.map((m) => (typeof m.fret === "number" ? m.fret : 0)));
+  const frets = Math.max(3, highest);
+  const bottom = 24 + frets * 24;
+  const H = bottom + (mini ? 6 : 20);
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="fretboard" role="img" aria-label={`${fingering.label} on the fretboard`}>
-      <rect x={left} y={top - 4 * size} width={w - left - 8 * size} height={h - top * 2 + 8 * size} fill="#e9c89a" rx={4} />
-      {Array.from({ length: frets + 1 }, (_, i) => (
-        <line key={i} x1={left + i * sx} x2={left + i * sx} y1={top - 4 * size} y2={h - top + 4 * size} stroke="#2b1a12" strokeWidth={i === 0 ? 5 * size : 1.5} />
+    <svg viewBox={`0 0 128 ${H}`} className={`fretboard fb-${variant}`} role="img" aria-label={labelOf(fingering, marks)}>
+      <rect className="fb-wood" x={12.5} y={24} width={103} height={frets * 24} />
+      {frets >= 3 && <circle className="fb-inlay" cx={64} cy={24 + 2.5 * 24} r={3} />}
+      {STRING_NAMES.map((_, i) => (
+        <line key={`s${i}`} className="fb-string" x1={x(i)} x2={x(i)} y1={24} y2={bottom} strokeWidth={2.2 - i * 0.25} />
       ))}
-      {[3, 5].map((f) => (
-        <circle key={f} cx={left + (f - 0.5) * sx} cy={h / 2} r={3 * size} fill="#b8946a" />
+      {Array.from({ length: frets }, (_, k) => (
+        <line key={`f${k}`} className="fb-line" x1={12.5} x2={115.5} y1={24 + (k + 1) * 24} y2={24 + (k + 1) * 24} strokeWidth={1.6} />
       ))}
-      {STRING_NAMES.map((name, i) => (
-        <g key={i}>
-          <line x1={left} x2={w - 8 * size} y1={y(i + 1)} y2={y(i + 1)} stroke="#6b4226" strokeWidth={1 + i * 0.35} />
-          <text x={4 * size} y={y(i + 1) + 4 * size} fontSize={10 * size} fill="#6b4226">
-            {name}
-          </text>
-        </g>
-      ))}
-      {muted.map((s) => (
-        <text key={`m${s}`} x={left - 17 * size} y={y(s) + 4 * size} fontSize={11 * size} fill="#9b2c2c" fontWeight="bold">
-          ×
-        </text>
-      ))}
-      {marks.map((m, i) =>
-        m.fret === 0 ? (
-          <circle key={i} cx={x(0)} cy={y(m.string)} r={5 * size} fill="none" stroke={m.main ? "#c8553d" : "#c8553d88"} strokeWidth={2.5} />
-        ) : (
-          <g key={i}>
-            <circle cx={x(m.fret)} cy={y(m.string)} r={6.5 * size} fill={m.main ? "#c8553d" : "#c8553d66"} stroke="#2b1a12" strokeWidth={1.5} />
-            {m.finger && /[1-4]/.test(m.finger) && (
-              <text x={x(m.fret)} y={y(m.string) + 3.4 * size} fontSize={9.5 * size} fontWeight="bold" fill="#fff6dc" textAnchor="middle">
+      <rect className="fb-nut" x={12.5} y={18} width={103} height={6} />
+      {marks.map((m) => {
+        if (m.fret === "x")
+          return (
+            <text key={`m${m.i}`} className="fb-mute" x={x(m.i)} y={16.5} textAnchor="middle">
+              ×
+            </text>
+          );
+        if (m.fret === 0) return <circle key={`o${m.i}`} className="fb-open" cx={x(m.i)} cy={11} r={5.5} strokeWidth={2.4} />;
+        const cy = 24 + (m.fret - 0.5) * 24;
+        return (
+          <g key={`d${m.i}`}>
+            {/* Digit boxes get the larger dot (the 16-unit digit fits inside); the mini strip keeps its small one. */}
+            <circle className="fb-dot" cx={x(m.i)} cy={cy} r={mini ? 8.6 : 10} strokeWidth={1.5} />
+            {!mini && m.finger && /[1-4]/.test(m.finger) && (
+              <text className="fb-digit" x={x(m.i)} y={cy + 5.1} textAnchor="middle">
                 {m.finger}
               </text>
             )}
           </g>
-        ),
-      )}
-      {fingering.notes && fingering.notes[0] && (
-        <text x={w - 10 * size} y={h - 2 * size} fontSize={9 * size} fill="#6b4226" textAnchor="end">
-          {fingering.notes[0].fret === 0 ? "open string" : `fret ${fingering.notes[0].fret}`}
-        </text>
-      )}
+        );
+      })}
+      {!mini &&
+        STRING_NAMES.map((name, i) => (
+          <text key={`n${i}`} className="fb-name" x={x(i)} y={H - 5} textAnchor="middle">
+            {name}
+          </text>
+        ))}
     </svg>
   );
 }
+
+export default memo(Fretboard);

@@ -17,6 +17,18 @@ const NEON_PINK = 0xff5fd2;
 const LASER = 0xff4d5e;
 const GOLD = 0xeac54e;
 
+function glint(g: G, x: number, y: number, r = 2, color = 0xffffff) {
+  g.fillStyle(color, 0.92).fillCircle(x, y, r);
+  g.fillStyle(color, 0.4).fillCircle(x - r * 0.7, y - r * 0.7, r * 0.5);
+}
+
+function studs(g: G, points: readonly (readonly [number, number])[], color = GOLD) {
+  for (const [x, y] of points) {
+    circle(g, x, y, 3.2, color, 1.4);
+    g.fillStyle(0xffffff, 0.55).fillCircle(x - 0.9, y - 1, 0.8);
+  }
+}
+
 // ------------------------------------------------------------------- Moonlit Wood
 function giant(g: G, raised = false) {
   const skin = 0xe2ab7c;
@@ -28,12 +40,17 @@ function giant(g: G, raised = false) {
   stick(g, 70, 118, 46, 184, 22, skin); // back arm
   poly(g, pts(62, 98, 162, 98, 178, 212, 46, 212), 0x5f7a3a); // tunic
   poly(g, pts(62, 98, 162, 98, 150, 120, 74, 120), 0x4c6430, 4);
+  // Patchwork makes the giant feel lived-in at boss scale.
+  poly(g, pts(78, 128, 112, 122, 108, 154, 76, 160), 0x6f9146, 0);
+  poly(g, pts(116, 122, 150, 126, 158, 158, 120, 154), 0x496837, 0);
+  for (const [x, y] of [[82, 143], [94, 139], [130, 139], [144, 145]] as const) g.fillStyle(0xc8d98f, 0.72).fillCircle(x, y, 1.7);
   g.fillStyle(0x5a3418, 1).fillRect(52, 158, 120, 14);
   g.lineStyle(4, OUT, 1).strokeRect(52, 158, 120, 14);
   circle(g, 112, 165, 8, 0xf2c14e, 3);
   rrect(g, 70, 180, 22, 18, 4, 0x7a8f4a, 3); // patch
   circle(g, 112, 62, 40, skin);
   poly(g, pts(78, 66, 146, 66, 140, 112, 112, 128, 84, 112), hair); // beard
+  for (const x of [90, 102, 122, 134]) g.lineStyle(2, 0xbd7a4c, 0.8).lineBetween(x, 71, x + (x < 112 ? 5 : -5), 105);
   poly(g, pts(72, 56, 80, 28, 112, 16, 144, 28, 152, 56, 136, 42, 112, 36, 88, 42), hair);
   ellipse(g, 112, 70, 18, 13, 0xd08f60, 3);
   circle(g, 98, 54, 6, 0xffffff, 3);
@@ -42,6 +59,7 @@ function giant(g: G, raised = false) {
   line(g, 88, 44, 106, 49, 5);
   line(g, 118, 49, 136, 44, 5);
   line(g, 102, 92, 122, 90, 4);
+  glint(g, 99, 53, 1.3);
   if (raised) {
     stick(g, 160, 112, 184, 46, 24, skin);
     stick(g, 184, 50, 206, 14, 16, 0x7a4a26);
@@ -86,7 +104,12 @@ function scorpion(g: G, strike = false) {
   for (const [x, y] of tail) circle(g, x, y, 9, shell, 4);
   const [tx, ty] = tail[tail.length - 1];
   poly(g, strike ? pts(tx + 6, ty - 6, tx + 22, ty, tx + 8, ty + 8) : pts(tx + 4, ty - 8, tx + 16, ty - 2, tx + 6, ty + 6), 0x3a2a1a, 3);
+  g.fillStyle(0xffe066, 0.85).fillCircle(tx + 6, ty - 1, 3);
   ellipse(g, 66, 64, 72, 30, shell);
+  // Faceted plates keep the small enemy legible against the sand.
+  for (const [x, y, w] of [[48, 61, 10], [62, 58, 12], [77, 60, 10]] as const) {
+    g.fillStyle(0xe6b35d, 0.62).fillTriangle(x - w / 2, y, x, y - 8, x + w / 2, y);
+  }
   for (let x = 46; x < 96; x += 14) line(g, x, 52, x, 76, 3, dark);
   ellipse(g, 100, 62, 30, 24, shell);
   stick(g, 108, 60, 120, 48, 6, shell);
@@ -95,7 +118,8 @@ function scorpion(g: G, strike = false) {
   stick(g, 104, 68, 118, 76, 6, shell);
   ellipse(g, 124, 78, 18, 11, shell, 4);
   g.fillStyle(OUT, 1).fillCircle(106, 56, 3).fillCircle(112, 58, 2.5);
-  g.fillStyle(0xffffff, 1).fillCircle(106.8, 55, 1).fillCircle(112.6, 57.2, 0.8);
+  glint(g, 106.8, 55, 1);
+  glint(g, 112.6, 57.2, 0.8);
 }
 
 function thief(g: G, swing = false) {
@@ -109,6 +133,7 @@ function thief(g: G, swing = false) {
   poly(g, pts(74, 54, 60, 54, 62, 96, 74, 96), 0x2f2f4a, 4);
   g.fillStyle(0xc0392b, 1).fillRect(30, 84, 44, 10);
   g.lineStyle(3, OUT, 1).strokeRect(30, 84, 44, 10);
+  for (const x of [38, 48, 58, 68]) g.fillStyle(0xf2c14e, 0.85).fillCircle(x, 89, 1.8);
   circle(g, 56, 36, 16, skin);
   circle(g, 62.5, 34.5, 3.8, 0xffffff, 2);
   g.fillStyle(OUT, 1).fillCircle(63.5, 35, 2);
@@ -118,6 +143,9 @@ function thief(g: G, swing = false) {
   ellipse(g, 54, 24, 42, 22, 0xf2efe6);
   ellipse(g, 54, 18, 30, 14, 0xe4ddcc, 3);
   circle(g, 56, 14, 6, 0xc0392b, 3);
+  // A scarf tail provides a readable motion cue in both sword poses.
+  poly(g, pts(38, 24, 18, 34, 28, 42, 43, 31), 0xc0392b, 3);
+  glint(g, 64.2, 33.8, 0.8);
   if (swing) {
     stick(g, 68, 64, 88, 44, 7, skin);
     arcStroke(g, 70, 64, 36, -2.3, -0.4, 6, 0xdfe6ee);
@@ -134,6 +162,7 @@ function mummy(g: G) {
   stick(g, 60, 110, 64, 138, 12, wrap);
   rrect(g, 26, 54, 50, 62, 14, wrap);
   for (let y = 62; y < 114; y += 9) line(g, 28, y, 74, y + 4, 2.5, seam);
+  for (const [x, y] of [[36, 70], [61, 80], [44, 99]] as const) g.fillStyle(0xfaf2d8, 0.75).fillRect(x, y, 12, 2);
   stick(g, 54, 74, 92, 82, 11, wrap);
   stick(g, 60, 62, 98, 66, 11, wrap);
   for (const x of [72, 82, 92]) line(g, x, 60, x - 2, 70, 2, seam);
@@ -142,6 +171,10 @@ function mummy(g: G) {
   line(g, 33, 44, 71, 40, 2.5, seam);
   rrect(g, 44, 28, 28, 11, 4, 0x2a1f14, 3);
   g.fillStyle(0x9cff6e, 1).fillCircle(53, 33, 3).fillCircle(65, 33, 3);
+  glint(g, 52.3, 32.2, 0.8, 0xeaffd4);
+  glint(g, 64.3, 32.2, 0.8, 0xeaffd4);
+  // A faded charm distinguishes this from a plain wrapped zombie.
+  g.lineStyle(2, 0xc9a35e, 0.75).beginPath().moveTo(50, 68).lineTo(58, 76).lineTo(50, 84).lineTo(42, 76).closePath().strokePath();
   poly(g, pts(26, 96, 14, 120, 22, 122, 30, 100), wrap, 3);
 }
 
@@ -157,6 +190,7 @@ function djinn(g: G) {
   poly(g, pts(88, 58, 72, 58, 72, 104, 80, 100), 0x6a2a8a, 3);
   g.fillStyle(0xf2c14e, 1).fillRect(46, 100, 32, 8);
   g.lineStyle(3, OUT, 1).strokeRect(46, 100, 32, 8);
+  studs(g, [[50, 104], [62, 104], [74, 104]]);
   stick(g, 32, 64, 16, 100, 12, skin);
   rrect(g, 8, 88, 18, 12, 4, 0xf2c14e, 3);
   stick(g, 90, 64, 110, 34, 12, skin);
@@ -172,6 +206,8 @@ function djinn(g: G) {
   line(g, 66, 29, 76, 26, 3);
   poly(g, pts(58, 50, 66, 50, 62, 62), 0x2a1a10, 0);
   circle(g, 42, 42, 4, 0xf2c14e, 2);
+  g.lineStyle(3, 0xffbd68, 0.8).beginPath().arc(57, 129, 27, 0.2, 2.9, false).strokePath();
+  glint(g, 55.5, 33, 1.1, 0xfff0a6);
 }
 
 function caveDoor(g: G) {
@@ -203,6 +239,10 @@ function sphinx(g: G) {
   ellipse(g, 70, 150, 110, 90, body);
   ellipse(g, 150, 160, 220, 76, body);
   rrect(g, 196, 168, 124, 30, 14, body);
+  // Sun-carved muscles and jewelry make the stationary riddle guardian feel
+  // like a character, not just a piece of scenery.
+  g.lineStyle(3, 0xbf9858, 0.7).beginPath().arc(126, 158, 36, 2.8, 5.6, false).strokePath();
+  g.lineStyle(3, 0xbf9858, 0.7).beginPath().arc(176, 166, 38, 3.1, 5.8, false).strokePath();
   line(g, 300, 172, 300, 196, 3);
   line(g, 286, 172, 286, 196, 3);
   ellipse(g, 238, 118, 86, 104, body);
@@ -220,6 +260,8 @@ function sphinx(g: G) {
   line(g, 230, 102, 248, 102, 3);
   rrect(g, 230, 112, 18, 26, 6, blue, 3);
   for (let y = 117; y < 136; y += 6) line(g, 232, y, 246, y, 2, GOLD);
+  circle(g, 239, 120, 4, 0xd94f6a, 1.5);
+  glint(g, 237.5, 118.5, 1);
 }
 
 function palm(g: G) {
@@ -304,7 +346,11 @@ function drone(g: G) {
   ellipse(g, 52, 62, 40, 14, STEEL_MID, 0);
   circle(g, 62, 48, 12, 0x1b2230, 4);
   circle(g, 64, 47, 7, LASER, 0);
-  g.fillStyle(0xffffff, 0.8).fillCircle(61, 44, 2.5);
+  glint(g, 61, 44, 2.5);
+  // Engine vents and status lamps make the drone clearly mechanical even at
+  // its small in-game scale.
+  for (const x of [39, 47, 55]) line(g, x, 61, x + 3, 68, 1.5, STEEL_DARK);
+  studs(g, [[28, 48], [78, 48]], NEON_CYAN);
   line(g, 40, 30, 36, 14, 3);
   circle(g, 36, 12, 4, LASER, 3);
   stick(g, 40, 70, 34, 80, 3, STEEL_DARK);
@@ -322,6 +368,7 @@ function tinSoldier(g: G) {
   line(g, 30, 64, 64, 110, 5, 0xf2efe6);
   line(g, 64, 64, 30, 110, 5, 0xf2efe6);
   circle(g, 47, 87, 5, 0xf2c14e, 3);
+  studs(g, [[36, 74], [58, 74], [36, 106], [58, 106]], 0xd2dae3);
   rrect(g, 26, 110, 42, 10, 3, blue, 3);
   circle(g, 48, 48, 14, 0xf0c8a0);
   g.fillStyle(0xe8897a, 0.8).fillCircle(54, 52, 3);
@@ -331,6 +378,7 @@ function tinSoldier(g: G) {
   rrect(g, 32, 38, 34, 6, 2, 0x1b1b24, 3);
   circle(g, 49, 26, 5, 0xf2c14e, 3);
   ellipse(g, 49, 6, 10, 14, red, 3);
+  glint(g, 53, 45, 0.8);
   stick(g, 66, 72, 76, 22, 5, 0x6b4226);
   stick(g, 76, 24, 78, 8, 3, 0xd2dae3);
   stick(g, 64, 74, 70, 94, 8, red);
@@ -346,7 +394,8 @@ function mech(g: G, raised = false) {
   rrect(g, 46, 60, 116, 100, 18, STEEL);
   rrect(g, 60, 74, 88, 50, 10, 0xc2ccd8, 4);
   circle(g, 104, 99, 14, 0x4ef0ff, 4);
-  g.fillStyle(0xffffff, 0.8).fillCircle(99, 94, 4);
+  glint(g, 99, 94, 4);
+  g.lineStyle(2.5, STEEL_DARK, 0.78).lineBetween(68, 88, 88, 88).lineBetween(120, 112, 140, 112);
   g.fillStyle(OUT, 1);
   for (const [x, y] of [[54, 68], [154, 68], [54, 150], [154, 150]]) g.fillCircle(x, y, 3);
   rrect(g, 80, 26, 56, 40, 10, STEEL);
@@ -354,6 +403,7 @@ function mech(g: G, raised = false) {
   g.fillStyle(LASER, 1).fillRect(108, 40, 20, 6);
   line(g, 96, 26, 92, 10, 3);
   circle(g, 92, 8, 4, LASER, 3);
+  studs(g, [[70, 138], [138, 138]], NEON_CYAN);
   if (raised) {
     stick(g, 152, 80, 182, 30, 24, STEEL_DARK);
     rrect(g, 166, 6, 36, 30, 8, STEEL);
@@ -372,6 +422,8 @@ function turret(g: G) {
   rrect(g, 104, 50, 14, 26, 4, 0x3e4756, 4);
   circle(g, 54, 54, 10, 0x1b2230, 4);
   circle(g, 56, 53, 5, LASER, 0);
+  glint(g, 54, 51, 1.5);
+  for (const y of [66, 76, 86]) line(g, 34, y, 47, y + 3, 1.5, STEEL_DARK);
   line(g, 40, 28, 34, 10, 3);
   circle(g, 34, 8, 4, NEON_CYAN, 3);
 }
@@ -398,6 +450,9 @@ function nightingale(g: G) {
   ellipse(g, 134, 22, 26, 18, GOLD, 4);
   ellipse(g, 128, 104, 130, 88, GOLD);
   poly(g, pts(84, 86, 150, 72, 136, 124, 92, 120), dark);
+  // Feather seams keep the mechanical bird ornate, rather than a flat gold
+  // blob, and match the storybook ink treatment used in the other worlds.
+  for (const x of [96, 110, 124, 138]) line(g, x, 86, x - 6, 126, 2, 0xd9a43a);
   for (const [x, y, c] of [[104, 94, 0x3fa7d6], [124, 88, 0xd94f6a], [116, 108, 0x5fd38a]] as const) circle(g, x, y, 6, c, 3);
   circle(g, 164, 116, 18, dark, 4); // gear on the chest
   g.fillStyle(dark, 1);
@@ -410,6 +465,7 @@ function nightingale(g: G) {
   poly(g, pts(222, 64, 248, 72, 222, 82), 0xf2efe6, 4);
   circle(g, 204, 64, 8, 0xffffff, 3);
   g.fillStyle(0x3fa7d6, 1).fillCircle(206, 64, 4);
+  glint(g, 207, 62.5, 1.2);
   stick(g, 120, 146, 112, 176, 5, dark);
   stick(g, 140, 146, 148, 176, 5, dark);
 }

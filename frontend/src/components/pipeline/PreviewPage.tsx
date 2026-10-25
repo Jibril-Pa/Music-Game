@@ -266,7 +266,7 @@ export default function PreviewPage() {
           <div className="recent">
             <span className="muted small">Recent:</span>
             {jobs.slice(0, 8).map((j) => (
-              <button key={j.jobId} className={`chip ${j.jobId === jobId ? "active" : ""}`} onClick={() => openJob(j.jobId)}>
+              <button key={j.jobId} className={`chip ${j.jobId === jobId ? "active" : ""}`} aria-pressed={j.jobId === jobId} onClick={() => openJob(j.jobId)}>
                 {j.title || j.jobId}
                 {j.source && j.source !== "guitar" ? ` (${j.source})` : ""}
                 {j.status !== "done" ? ` · ${j.status}` : ""}

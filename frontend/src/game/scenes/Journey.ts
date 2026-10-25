@@ -13,9 +13,9 @@ import { ProceduralMusic } from "@/lib/game-audio/music";
 import type { Enemy, EnemyKind } from "../entities/Enemy";
 import { EventBus } from "../EventBus";
 import { EV, type HudState } from "../events";
-import { GROUND_Y, burst, light, popup } from "../fx";
+import { GROUND_Y, burst, headline, light, popup, shake } from "../fx";
 import { LEVELS, WORLDS, levelAt, sceneFor, unlockLevel, type JourneyLevel, type SetPiece, type Spawn } from "../levels";
-import { session } from "../state";
+import { newStats, session } from "../state";
 import { FightScene } from "./FightScene";
 import { actorTint, showWorld } from "../stage";
 import { THEMES, endSign, scatterProps, scrollingBackdrop } from "./worlds";
@@ -70,9 +70,9 @@ export class Journey extends FightScene {
     const w = WORLDS[lv.world];
     const firstOfWorld = LEVELS.findIndex((l) => l.world === lv.world) === session.level;
     if (firstOfWorld) popup(this, 640, 150, `${w.era}...`, "#ffd6a0", 30, 2600).setScrollFactor(0);
-    popup(this, 640, 210, `${lv.id} · ${lv.name}`, "#ffe9a8", 52, 2000).setScrollFactor(0);
+    popup(this, 640, 210, `${lv.id} · ${lv.name}`, "#ffe9a8", 52, 2200).setScrollFactor(0);
     const what = session.playMode === "chords" ? "chord" : "note";
-    popup(this, 640, 270, firstOfWorld ? w.arrival : `Play the ${what} over each foe!`, "#fff6dc", 28, 2600).setScrollFactor(0);
+    headline(this, firstOfWorld ? w.arrival : `Play the ${what} over each foe!`, { y: 282, hold: 2000 });
   }
 
   protected buildWorld() {
@@ -160,6 +160,11 @@ export class Journey extends FightScene {
     this.blocker = { e, name, max: e.symbols.length, objective };
   }
 
+  /** "chords" or "notes", for the objectives. */
+  private get chords(): string {
+    return session.playMode === "chords" ? "chords" : "notes";
+  }
+
   /** Calls in `kind` every so often while `who` is alive. */
   private summon(who: Enemy, kind: EnemyKind, delays: number[]) {
     for (const delay of delays) {
@@ -169,20 +174,21 @@ export class Journey extends FightScene {
     }
   }
 
-  private headline(line: string, size = 40, color = "#ffd6a0") {
-    popup(this, 640, 200, line, color, size, 2200).setScrollFactor(0);
+  /** A narrator line, on a paper plate in the scene's headline lane. */
+  private narrate(line: string) {
+    headline(this, line);
   }
 
   // ---------------------------------------------------------------- set pieces
   private trollRises() {
     const x = this.mark("troll-bridge") - 260;
     const e = this.addEnemy("troll", x, randomSymbols(session.playMode, this.stage, 3));
-    this.block(e, "Bridge Troll", "The troll blocks the bridge!");
+    this.block(e, "Bridge Troll", `Play all the troll's ${this.chords} to cross the bridge`);
     e.y = GROUND_Y + 200;
     e.body2.enable = false;
-    this.headline("Who's that trip-trapping over my bridge?", 34);
+    this.narrate("Who's that trip-trapping over my bridge?");
     gameAudio.play("smash");
-    this.cameras.main.shake(300, 0.008);
+    shake(this, 300, 0.008);
     burst(this, x, GROUND_Y, { tint: [0x9fdcf0, 0xffffff], count: 24, speed: 420, angle: { min: 220, max: 320 } });
     this.tweens.add({
       targets: e,
@@ -198,21 +204,22 @@ export class Journey extends FightScene {
   private witchAppears() {
     const x = this.mark("witch-house") - 120;
     const e = this.addEnemy("witch", x, randomSymbols(session.playMode, this.stage, 2));
-    this.block(e, "Gingerbread Witch", "The witch blocks the path!");
+    const one = session.playMode === "chords" ? "chord" : "note";
+    this.block(e, "Gingerbread Witch", `Play all the witch's ${this.chords}, and pop her candy with its ${one}`);
     e.setAlpha(0);
     this.tweens.add({ targets: e, alpha: 1, duration: 500 });
     burst(this, x, GROUND_Y - 80, { tint: [0xff7eb6, 0xffe066, 0x58c7ff], count: 20, speed: 260 });
-    this.headline("The Gingerbread Witch!", 44);
+    this.narrate("The Gingerbread Witch!");
     this.summon(e, "wolf", [5000, 11000, 17000]);
   }
 
   private giantClimbsDown() {
     const x = this.mark("beanstalk") - 40;
     const e = this.addEnemy("giant", x);
-    this.block(e, "The Giant", "The giant climbed down the beanstalk!");
+    this.block(e, "The Giant", `Play all the giant's ${this.chords}`);
     e.y = -300;
     e.body2.enable = false;
-    this.headline("Fee-fi-fo-fum!", 54);
+    this.narrate("Fee-fi-fo-fum!");
     this.tweens.add({
       targets: e,
       y: GROUND_Y,
@@ -222,14 +229,14 @@ export class Journey extends FightScene {
         if (!e.active) return;
         e.body2.enable = true;
         gameAudio.play("smash");
-        this.cameras.main.shake(350, 0.012);
+        shake(this, 350, 0.012);
         burst(this, x, GROUND_Y, { tint: [0x8a5a33, 0x6db34b], count: 20, speed: 320, angle: { min: 200, max: 340 } });
       },
     });
   }
 
   private wolfPack() {
-    this.headline("Awooooo! A wolf pack!", 44);
+    this.narrate("Awooooo! A wolf pack!");
     gameAudio.play("wind");
     const kinds: EnemyKind[] = ["wolf", "pup", "wolf", "pup", "wolf"];
     kinds.forEach((k, i) => this.time.delayedCall(i * 380, () => !this.ended && this.addEnemy(k, this.spawnX() + i * 30)));
@@ -238,10 +245,10 @@ export class Journey extends FightScene {
   private sesame() {
     const x = this.mark("sesame-cave");
     const door = this.addEnemy("cavedoor", x);
-    this.block(door, "The Cave Door", "Open, Sesame! Play the chords on the door");
-    this.headline("A cave sealed by magic... Open, Sesame!", 34);
+    this.block(door, "The Cave Door", `Open, Sesame! Play all the door's ${this.chords}`);
+    this.narrate("A cave sealed by magic... Open, Sesame!");
     door.onSlain = () => {
-      this.headline("The forty thieves' hideout! Here they come!", 32);
+      this.narrate("The forty thieves' hideout! Here they come!");
       for (let i = 0; i < 3; i++) this.time.delayedCall(250 + i * 450, () => !this.ended && this.addEnemy("thief", x + 20));
     };
   }
@@ -249,19 +256,19 @@ export class Journey extends FightScene {
   private sphinxAwakes() {
     const x = this.mark("sphinx");
     const e = this.addEnemy("sphinx", x);
-    this.block(e, "The Sphinx", "Answer the Sphinx's riddles: play its chords!");
+    this.block(e, "The Sphinx", `Answer the Sphinx: play all its ${this.chords}`);
     e.setAlpha(0);
     this.tweens.add({ targets: e, alpha: 1, duration: 700 });
     burst(this, x, GROUND_Y - 100, { tint: [0xf3c77e, 0xffffff], count: 26, speed: 320 });
-    this.headline("The Sphinx: \"Answer my riddles... in chords!\"", 32);
+    this.narrate("The Sphinx: \"Answer my riddles... in chords!\"");
     this.summon(e, "scorpion", [6000, 13000, 20000]);
   }
 
   private laserGate() {
     const x = this.mark("laser-gate");
     const e = this.addEnemy("lasergate", x);
-    this.block(e, "Laser Gate", "Shut down the laser gate: play its chords!");
-    this.headline("A laser gate! Play its chords to shut it down", 32);
+    this.block(e, "Laser Gate", `Play all the gate's ${this.chords} to shut it down`);
+    this.narrate("A laser gate! Play its chords to shut it down");
     gameAudio.play("block");
     this.summon(e, "drone", [4000, 9000, 14000, 19000]);
   }
@@ -269,12 +276,12 @@ export class Journey extends FightScene {
   private nightingaleSings() {
     const x = this.mark("nightingale");
     const e = this.addEnemy("nightingale", x);
-    this.block(e, "The Clockwork Nightingale", "Its song is a trap: play its chords!");
+    this.block(e, "The Clockwork Nightingale", `Play all the Nightingale's ${this.chords}`);
     const hoverY = GROUND_Y - (e.def.altitude ?? 150);
     e.setBaseY(-260);
     e.y = -260;
     this.tweens.add({ targets: e, y: hoverY, duration: 1200, ease: "Back.Out", onUpdate: () => e.setBaseY(e.y), onComplete: () => e.setBaseY(hoverY) });
-    this.headline("The Clockwork Nightingale sings!", 40);
+    this.narrate("The Clockwork Nightingale sings!");
     gameAudio.play("heal");
     this.summon(e, "drone", [5000, 11000, 17000]);
   }
@@ -287,11 +294,13 @@ export class Journey extends FightScene {
     unlockLevel(next);
     gameAudio.play("victory");
     popup(this, 640, 210, `${this.level.id} complete!`, "#ffe066", 52, 1600).setScrollFactor(0);
-    popup(this, 640, 280, this.level.outro, "#ffd6a0", 34, 2000).setScrollFactor(0);
+    headline(this, this.level.outro, { y: 282, hold: 1500 });
     this.time.delayedCall(1700, () => {
       this.cameras.main.fadeOut(700, 20, 12, 8);
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
         session.level = next;
+        // Stats are per level: the End screen shows the fight just played.
+        session.stats = newStats();
         this.scene.start(sceneFor(next));
       });
     });

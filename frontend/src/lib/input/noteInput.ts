@@ -8,7 +8,7 @@
  */
 
 import { loadEssentia } from "@/lib/audio/essentia";
-import { startPipeline, type AudioPipeline, type AudioSource } from "@/lib/audio/micPipeline";
+import { PipelineError, startPipeline, type AudioPipeline, type AudioSource } from "@/lib/audio/micPipeline";
 import { DETECT_CONFIG, NoteDetector, type DetectorDiag } from "./detector";
 import { EchoGuard } from "./echoGuard";
 import { pitchClassOf, type ChordName, type NoteEvent, type PitchClass } from "./types";
@@ -53,6 +53,26 @@ export function keyFor(input: string, kind: "note" | "chord" = "note"): string |
 
 export type NoteListener = (e: NoteEvent) => void;
 
+const DEVICE_KEY = "traveling-bard:mic-device";
+
+/** The mic picked in the tuner, remembered in this browser (undefined = the system default). */
+function readDevice(): string | undefined {
+  try {
+    return (typeof window !== "undefined" && window.localStorage.getItem(DEVICE_KEY)) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveDevice(id: string | undefined) {
+  try {
+    if (id) window.localStorage.setItem(DEVICE_KEY, id);
+    else window.localStorage.removeItem(DEVICE_KEY);
+  } catch {
+    // Storage blocked: the choice just isn't remembered.
+  }
+}
+
 /** Page-wide, so ids stay unique even if the NoteInput is recreated. */
 let nextEventId = 1;
 export interface EchoStats {
@@ -83,6 +103,8 @@ export class NoteInput {
   private source: AudioSource = { kind: "mic" };
   /** Laptop speakers, no headphones: browser echo cancellation on. */
   speakerMode = false;
+  /** Which mic (a deviceId from enumerateDevices), or undefined for the system default. */
+  deviceId: string | undefined = readDevice();
   private latencies: number[] = [];
   private inputLatencyMs: number | null = null;
   private lastDiagAt = 0;
@@ -167,7 +189,8 @@ export class NoteInput {
     await this.stopMic();
     const session = ++this.session;
     this.source = source;
-    if (source.kind === "mic") source = { ...source, echoCancellation: this.speakerMode };
+    const picked = source.kind === "mic" && !source.deviceId ? this.deviceId : undefined;
+    if (source.kind === "mic") source = { ...source, echoCancellation: this.speakerMode, deviceId: source.deviceId ?? picked };
     this.setStatus("starting");
     try {
       await loadEssentia();
@@ -191,9 +214,24 @@ export class NoteInput {
       this.inputLatencyMs = pipeline.inputLatencyMs;
       this.setStatus("on");
     } catch (err) {
+      // The mic picked earlier is gone (unplugged, another computer): use the default one.
+      if (picked && session === this.session && err instanceof PipelineError && err.code === "no-mic") {
+        this.deviceId = undefined;
+        saveDevice(undefined);
+        return this.startMic(this.source);
+      }
       if (session === this.session) this.setStatus("error", err instanceof Error ? err.message : String(err));
       throw err;
     }
+  }
+
+  /** Use another mic (undefined = the system default). Restarts a running mic. Remembered in this browser. */
+  async setDevice(id: string | undefined): Promise<void> {
+    const next = id && id !== "default" ? id : undefined;
+    if (next === this.deviceId) return;
+    this.deviceId = next;
+    saveDevice(next);
+    if (this.micOn && this.source.kind === "mic") await this.startMic(this.source).catch(() => {});
   }
 
   /** Releases the mic (tracks stopped, AudioContext closed). Safe to call twice. */

@@ -14,8 +14,10 @@ export const session = {
   heroMaxHp: 100,
   /** Index into LEVELS (levels.ts): the level being played. */
   level: 0,
+  /** prefers-reduced-motion: no camera shakes, zooms, pops or rises (set by GameApp, read through fx.ts). */
+  reducedMotion: false,
 };
 
 export function newStats(): GameStats {
-  return { notesHeard: 0, perfects: 0, slain: 0, parries: 0, parryAttempts: 0, maxCombo: 0, misses: 0, startedAt: performance.now() };
+  return { notesHeard: 0, hits: 0, perfects: 0, slain: 0, parries: 0, parryAttempts: 0, maxCombo: 0, misses: 0, startedAt: performance.now() };
 }

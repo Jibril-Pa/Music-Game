@@ -186,7 +186,7 @@ export default function InputTest() {
 
       {selfTest?.groups && (
         <section className="card">
-          <h3>Self-test results</h3>
+          <h2>Self-test results</h2>
           <table className="it-results">
             <thead>
               <tr><th>group</th><th>detected</th><th>median latency</th><th>onset error</th><th>misses</th></tr>
@@ -208,7 +208,7 @@ export default function InputTest() {
       )}
 
       <section className="card">
-        <h3>Events</h3>
+        <h2>Events</h2>
         <table className="it-events">
           <thead>
             <tr><th>#</th><th>heard</th><th>type</th><th>source</th><th>conf</th><th>latency</th><th>midi</th></tr>

@@ -12,14 +12,33 @@ import { GRADE_MAGIC, judge, type Grade } from "@/lib/combat/rhythm";
 import { SYMBOL_SETS, chordMidis, enemyPool, matches, playedLabel, randomSymbols, symbolCountFor, symbolKind } from "@/lib/combat/spells";
 import { gameAudio, type SfxName } from "@/lib/game-audio/audio";
 import type { SongClock } from "@/lib/game-audio/music";
+import type { DetectorDiag } from "@/lib/input/detector";
 import { getNoteInput, keyFor } from "@/lib/input/noteInput";
 import type { NoteEvent } from "@/lib/input/types";
 import { ENEMY_DEFS, Enemy, type EnemyHost, type EnemyKind, type FoeMods } from "../entities/Enemy";
+import { HeardChip, type HeardKind, type HeardTone } from "../entities/HeardChip";
 import { Hero } from "../entities/Hero";
 import { EventBus, onBus } from "../EventBus";
 import { EV, type HeardEntry, type HudState } from "../events";
-import { FONT, GROUND_Y, burst, gradePopup, popup, text } from "../fx";
+import { C, FONT, GROUND_Y, burst, chordPlate, flash, headline, nudge, popup, reducedMotion, shake, text, zoomTo } from "../fx";
 import { newStats, session } from "../state";
+
+/** In an arena (heroHomeX), the bard steps back to their post this long after a knockback ends (the hit reads first)... */
+const HOME_BEAT_MS = 300;
+/** ...at up to this speed (px/s), slowing over the last HOME_SPEED / HOME_EASE px to HOME_MIN_SPEED. */
+const HOME_SPEED = 160;
+const HOME_EASE = 8;
+const HOME_MIN_SPEED = 40;
+/** Plates stacked next to the plate to read keep this gap (px), so its beat frame has room to close. */
+const FOCUS_GAP = 22;
+/** A muted mic (OS or interface mute) delivers digital silence: hop RMS exactly 0. Any working mic's own
+ *  noise reads far above this (one 16-bit LSB in a 512-sample hop is already 1.35e-6). */
+const SILENT_RMS = 1e-6;
+/** After this long with nothing but silence, the bard says the ear hears nothing (if something waits to be played)... */
+const SILENT_MS = 8000;
+/** ...and again at most this often; the line is long, so it holds longer than a "?". */
+const SILENT_REPEAT_MS = 20000;
+const SILENT_HOLD_MS = 2500;
 
 /** Anything a chord can hit: enemies, candies, the boss, his wind gust... */
 export interface SymbolTarget {
@@ -55,22 +74,50 @@ interface Fairy {
   done: boolean;
 }
 
-/** A gold chord chip with an optional key hint, used over enemies, candies, fairies. */
-export function symbolChip(scene: Phaser.Scene, symbol: string, hint: string, size: "big" | "small" = "big"): Phaser.GameObjects.Container {
-  const big = size === "big";
-  const t = scene.add.text(0, 0, symbol, { fontFamily: FONT, fontSize: big ? "30px" : "22px", fontStyle: "bold", color: "#2b1a12" }).setOrigin(0.5);
-  const w = Math.max(big ? 54 : 42, t.width + 20);
-  const h = big ? 46 : 36;
-  const g = scene.add.graphics();
-  g.fillStyle(0xffd25e, 1).fillRoundedRect(-w / 2, -h / 2, w, h, 12);
-  g.lineStyle(4, 0x2b1a12, 1).strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
-  const parts: Phaser.GameObjects.GameObject[] = [g, t];
-  if (hint) {
-    parts.push(
-      scene.add.text(0, h / 2 + 12, hint, { fontFamily: FONT, fontSize: "15px", fontStyle: "bold", color: "#fff6dc", stroke: "#2b1a12", strokeThickness: 4 }).setOrigin(0.5),
-    );
-  }
-  return scene.add.container(0, 0, parts).setDepth(46);
+/** A boss parry: the bubble's line, how it landed on the howl, how far off it was (ms, negative = early), and the howl's symbol. */
+export interface Parry {
+  label: string;
+  grade: Grade;
+  offsetMs: number;
+  symbol: string;
+}
+
+/** The chord plate the player should be reading: the nearest foe's, or the boss's own chip. */
+export interface FocusPlate {
+  readonly bounds: Phaser.Geom.Rectangle;
+  /** A little "no" shake after a wrong chord. */
+  nudge(): void;
+}
+
+/** A chip's plate as a FocusPlate (its size, keycap included, is stored by symbolChip). */
+export function chipPlate(scene: Phaser.Scene, chip: Phaser.GameObjects.Container): FocusPlate {
+  return {
+    get bounds() {
+      const w = (chip.getData("w") as number) * chip.scaleX;
+      const h = (chip.getData("h") as number) * chip.scaleY;
+      const top = (chip.getData("top") as number) * chip.scaleY;
+      return new Phaser.Geom.Rectangle(chip.x - w / 2, chip.y + top, w, h);
+    },
+    nudge: () => nudge(scene, chip),
+  };
+}
+
+/** A hit's timing in words: "Perfect!", "Good", "Early" or "Late" ("" when there is no beat to judge). */
+function timingWord(grade: Grade | null, offset: number | null): string {
+  if (!grade || offset === null) return "";
+  if (grade === "perfect") return "Perfect!";
+  if (grade === "good") return "Good";
+  return offset < 0 ? "Early" : "Late";
+}
+
+/** A one-chord gold plate (with its keycap for keyboard players): candies, the fairy, howls, gusts, the wolf. */
+export function symbolChip(scene: Phaser.Scene, symbol: string, key: string, size: "big" | "small" = "big"): Phaser.GameObjects.Container {
+  const plate = chordPlate(scene, [symbol], [key], size);
+  const below = plate.keycaps ? (size === "big" ? 14 : 10) : 0;
+  return scene.add
+    .container(0, 0, plate.parts)
+    .setDepth(46)
+    .setData({ w: plate.w, h: plate.h + below, top: -plate.h / 2 });
 }
 
 export abstract class FightScene extends Phaser.Scene implements EnemyHost {
@@ -100,13 +147,26 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
   private fairy: Fairy | null = null;
   private lastFairyAt = -1e9;
   private superHintShown = false;
+  /** The bard's speech bubble: what the ear heard. */
+  private heardChip!: HeardChip;
+  /** The gold frame that closes on the focus plate on every beat. */
+  private beatFrame!: Phaser.GameObjects.Graphics;
+  private unsubDiag: (() => void) | null = null;
+  /** The detector's "ignored sounds" count at the last diag (-1 = none yet). */
+  private lastIgnored = -1;
+  /** performance.now() of the last NoteEvent and of the last "?" bubble. */
+  private lastNoteAt = -1e9;
+  private lastUnclearAt = -1e9;
+  /** performance.now() since the mic has delivered only silence (null: it hears something), and of the last "hears nothing". */
+  private silentSince: number | null = null;
+  private lastSilentAt = -1e9;
 
   // ---------------------------------------------------------------- subclass hooks
   protected abstract buildWorld(): void;
   protected abstract heroStartX(): number;
   protected tickScene(_now: number, _dt: number): void {}
-  /** Boss parries: return a label if the input was used up. */
-  protected interceptNote(_ev: NoteEvent, _grade: Grade | null): string | null {
+  /** Boss parries: the parry if the input was used up on a howl. */
+  protected interceptNote(_ev: NoteEvent): Parry | null {
     return null;
   }
   /** Extra things chords can hit (the boss, his wind). */
@@ -125,6 +185,18 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
   /** Symbols coming at the bard on a beat (the boss's howls), soonest first. */
   protected upcomingSymbols(): string[] {
     return [];
+  }
+  /** The plate to read when no foe is in view (the boss: the wolf's chip). */
+  protected focusExtra(): FocusPlate | null {
+    return null;
+  }
+  /** The next howl's chip, if one is coming (it gets the nudge after a wrong chord). */
+  protected howlPlate(): FocusPlate | null {
+    return null;
+  }
+  /** Where the bard stands in an arena (they never walk there): knocked back, they step back to it. null = walking level. */
+  protected heroHomeX(): number | null {
+    return null;
   }
 
   get symbols() {
@@ -151,8 +223,16 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
 
     this.hero = new Hero(this, this.heroStartX(), session.heroMaxHp);
     this.physics.add.collider(this.hero, this.ground);
+    this.heardChip = new HeardChip(this);
+    this.beatFrame = this.add.graphics().setDepth(47);
+    this.lastIgnored = -1;
+    this.lastNoteAt = -1e9;
+    this.lastUnclearAt = -1e9;
+    this.silentSince = null;
+    this.lastSilentAt = -1e9;
 
     this.unsubNote = getNoteInput().on(this.onNote);
+    this.unsubDiag = getNoteInput().onDiag(this.onDiag);
     onBus(this, EV.setPaused, this.onPaused as (...a: never[]) => void);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanup, this);
@@ -171,11 +251,10 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     gameAudio.play(name as SfxName);
   }
 
-  /** Key hints only for keyboard players; guitarists just see the chord. */
+  /** The key that plays a symbol ("1", "Z"), for keyboard players only; guitarists just see the chord. */
   keyHint(symbol: string): string {
     if (session.mode !== "keyboard") return "";
-    const k = keyFor(symbol, symbolKind(session.playMode));
-    return k ? `key ${k}` : "";
+    return keyFor(symbol, symbolKind(session.playMode)) ?? "";
   }
 
   /** How many chords a new foe of this kind needs (tougher foes, more often in harder levels). */
@@ -220,14 +299,20 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     hero.hurtUntil = now + 220;
     hero.setVelocity(-260, -240);
     this.dashUntil = now + 220;
-    popup(this, hero.x, hero.y - 150, `-${amount}`, "#ff8a7a", 30, 600);
+    popup(this, this.besideHero(), hero.y - 118, `-${amount}`, "#ff8a7a", 30, 600);
     gameAudio.play("hurt");
-    this.cameras.main.shake(120, 0.006);
+    shake(this, 120, 0.006);
     this.streak = 0;
     void source;
     void fromX;
     if (hero.hp <= 0) this.defeat();
     else if (hero.hp <= hero.maxHp * 0.45) this.spawnFairy(true);
+  }
+
+  /** Where a number beside the bard pops: to their left, clear of the speech bubble (to their right near the screen's left edge). */
+  private besideHero(): number {
+    const x = this.hero.x - 52;
+    return x < this.cameras.main.worldView.x + 40 ? this.hero.x + 52 : x;
   }
 
   // ---------------------------------------------------------------- input
@@ -244,18 +329,27 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
 
   private onNote = (ev: NoteEvent) => {
     if (session.paused || this.ended || !this.hero?.active || this.scene.isPaused() || !this.scene.isActive()) return;
+    // The bard strums on every input: hits, misses, parries, the heal and the super.
+    this.hero.actionUntil = this.time.now + 220;
+    this.lastNoteAt = performance.now();
     const stats = session.stats!;
-    stats.notesHeard++;
     const offset = this.music?.offsetToNearestBeat(ev.time) ?? null;
-    const grade = this.music ? judge(offset, session.practice) : null;
-    if (grade === "perfect") stats.perfects++;
+    const beatGrade = this.music ? judge(offset, session.practice) : null;
+    stats.notesHeard++;
     // The backing moves to what you just played, so it blends in.
     this.music?.follow?.(playedLabel(ev));
 
-    const parried = this.interceptNote(ev, grade);
-    if (parried) {
-      this.emitHeard({ ev, grade, result: parried, hit: true });
-      this.gradeFx(grade);
+    const parry = this.interceptNote(ev);
+    if (parry) {
+      stats.hits++;
+      if (parry.grade === "perfect") {
+        stats.perfects++;
+        gameAudio.play("perfect");
+      }
+      this.answer(
+        { ev, grade: parry.grade, result: "sent the howl back", hit: true, line: parry.label, wanted: [parry.symbol], offsetMs: parry.offsetMs },
+        parry.grade === "perfect" ? "perfect" : "hit",
+      );
       return;
     }
     if (this.cinematic) return;
@@ -266,43 +360,61 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
 
     if (this.hero.magic >= 100 && matches(ev, set.super, mode, practice)) {
       this.playFeedback(ev);
+      this.countHit(beatGrade);
       this.superMove();
-      this.emitHeard({ ev, grade, result: "Happily Ever After!", hit: true });
+      // The super is its own moment (no bubble over its title): only the Ear logs it.
+      this.emitHeard({ ev, grade: beatGrade, result: "Happily Ever After!", hit: true, line: "Happily Ever After!", wanted: [set.super], offsetMs: offset });
       return;
     }
     if (this.fairy && !this.fairy.done && matches(ev, set.heal, mode, practice)) {
       this.playFeedback(ev);
+      this.countHit(beatGrade);
       this.healFromFairy();
-      this.emitHeard({ ev, grade, result: "Healed!", hit: true });
+      this.answer({ ev, grade: beatGrade, result: "Healed!", hit: true, line: "Healed!", wanted: [set.heal], offsetMs: offset }, "hit", "heal");
       return;
     }
 
     const view = this.cameras.main.worldView;
     const visible = (t: SymbolTarget) => t.x < view.right - 10 && t.x > view.x - 40;
+    const targets = this.allTargets().filter((t) => t.alive && t.next && visible(t));
     // A foe with several chords takes them in any order.
-    const hits = this.allTargets().flatMap((t) => {
-      if (!t.alive || !t.next || !visible(t)) return [];
-      const symbol = (t.wants ?? [t.next]).find((s) => matches(ev, s, mode, practice));
+    const hits = targets.flatMap((t) => {
+      const symbol = (t.wants ?? [t.next!]).find((s) => matches(ev, s, mode, practice));
       return symbol ? [{ t, symbol }] : [];
     });
     if (!hits.length) {
       this.fizzle(ev);
-      stats.misses++;
-      this.emitHeard({ ev, grade, result: "no match", hit: false });
+      // A miss is never graded, and only counts when there was something to hit.
+      if (targets.length || this.upcomingSymbols().length) stats.misses++;
+      const need = this.neededNow(targets);
+      // The plate that wanted something else shakes its head.
+      (this.howlPlate() ?? this.focusTarget())?.nudge();
+      this.answer(
+        {
+          ev,
+          grade: null,
+          hit: false,
+          result: need.length ? `needs ${need[0]}` : "nothing to hit",
+          line: need.length ? `needs ${need.slice(0, 2).join(" or ")}` : "",
+          wanted: need,
+          offsetMs: offset,
+        },
+        need.length ? "miss" : "neutral",
+      );
       return;
     }
 
     this.playFeedback(ev);
+    this.countHit(beatGrade);
     const now = this.time.now;
-    this.hero.actionUntil = now + 220;
     const labels: string[] = [];
     let slain = 0;
     for (const { t, symbol } of hits) {
       this.bolt(t);
-      const r = t.strike(now, grade, symbol);
+      const r = t.strike(now, beatGrade, symbol);
       labels.push(r.label);
       if (r.slain) slain++;
-      this.hero.addMagic(6 * (grade ? GRADE_MAGIC[grade] : 1));
+      this.hero.addMagic(6 * (beatGrade ? GRADE_MAGIC[beatGrade] : 1));
       this.streak = now - this.lastHitAt < 4000 ? this.streak + 1 : 1;
       this.lastHitAt = now;
     }
@@ -312,19 +424,92 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
       gameAudio.play("poof");
       this.hitStop(50);
     }
-    this.gradeFx(grade);
+    if (beatGrade === "perfect") gameAudio.play("perfect");
     const unique = [...new Set(labels)];
-    this.emitHeard({ ev, grade, result: unique.length === 1 && labels.length > 1 ? `${unique[0]} ×${labels.length}` : unique.join(", "), hit: true });
+    this.answer(
+      {
+        ev,
+        grade: beatGrade,
+        result: unique.length === 1 && labels.length > 1 ? `${unique[0]} ×${labels.length}` : unique.join(", "),
+        hit: true,
+        line: timingWord(beatGrade, offset),
+        wanted: [...new Set(hits.map((h) => h.symbol))],
+        offsetMs: offset,
+      },
+      beatGrade === "perfect" ? "perfect" : "hit",
+    );
     if (this.hero.magic >= 100 && !this.superHintShown) {
       this.superHintShown = true;
-      popup(this, this.hero.x, this.hero.y - 240, `Magic full! Play ${set.super} for Happily Ever After`, "#ffe066", 24, 2200).setDepth(70);
+      headline(this, "Magic full!", { sub: `Play ${set.super} for Happily Ever After`, tone: "super", hold: 2200 });
     }
   };
 
-  private gradeFx(grade: Grade | null) {
-    if (!grade) return;
-    gradePopup(this, this.hero.x, this.hero.y - 190, grade);
-    if (grade === "perfect") gameAudio.play("perfect");
+  /** Every input's answer: the bard's speech bubble (none over the super's title), and the same entry for the Ear. */
+  private answer(h: HeardEntry, kind: HeardKind, tone?: HeardTone) {
+    if (!this.cinematic) this.heardChip.show(kind, playedLabel(h.ev), h.line ?? "", tone);
+    this.emitHeard(h);
+  }
+
+  /**
+   * What the ear can't name, said by the bard while something waits to be played. Reads the
+   * detector's diagnostics; its logic is untouched.
+   *  - "?" for a strum it heard but couldn't name (headphones only).
+   *  - "?" and "the ear hears nothing" when a muted mic has sent only silence for SILENT_MS.
+   */
+  private onDiag = (d: DetectorDiag) => {
+    const input = getNoteInput();
+    const now = performance.now();
+    this.checkSilence(d.rms, input.speakerMode, now);
+    const prev = this.lastIgnored;
+    this.lastIgnored = d.ignored;
+    // The first sample, or a mic restart (the count starts over).
+    if (prev < 0 || d.ignored <= prev) return;
+    // With laptop speakers the music's own notes would trip it.
+    if (!input.micOn || input.speakerMode) return;
+    if (now - this.lastNoteAt < 450 || now - this.lastUnclearAt < 1500) return;
+    if (d.rms < Math.max(0.015, 3 * d.noiseFloor)) return;
+    if (!this.waitingForInput()) return;
+    this.lastUnclearAt = now;
+    this.hero.actionUntil = this.time.now + 220;
+    this.heardChip.show("unclear", "?", "strum again, let it ring");
+  };
+
+  /**
+   * Mic mode: digital silence (an OS or interface mute) for SILENT_MS while something waits, then at
+   * most every SILENT_REPEAT_MS. With laptop speakers, whose echo canceller can bring a working mic
+   * very low, only an exact 0 counts.
+   */
+  private checkSilence(rms: number, speakers: boolean, now: number) {
+    if (speakers ? rms !== 0 : rms >= SILENT_RMS) {
+      this.silentSince = null;
+      return;
+    }
+    this.silentSince ??= now;
+    if (session.mode !== "mic" || !getNoteInput().micOn) return;
+    if (now - this.silentSince < SILENT_MS || now - this.lastSilentAt < SILENT_REPEAT_MS || !this.waitingForInput()) return;
+    this.lastSilentAt = now;
+    this.heardChip.show("unclear", "?", "the ear hears nothing: check your mic", undefined, SILENT_HOLD_MS);
+  }
+
+  /** In play, with something to play: a foe's (or the wolf's) chord, or a howl on its way. */
+  private waitingForInput(): boolean {
+    if (session.paused || this.ended || this.cinematic || !this.hero?.active || this.scene.isPaused() || !this.scene.isActive()) return false;
+    return !!this.focusTarget() || this.upcomingSymbols().length > 0;
+  }
+
+  /** One input that hit something: a hit, and a Perfect only when it landed on the beat. */
+  private countHit(beatGrade: Grade | null) {
+    const stats = session.stats!;
+    stats.hits++;
+    if (beatGrade === "perfect") stats.perfects++;
+  }
+
+  /** What would have hit: the next howl if one is coming, else the nearest visible target's chords. */
+  private neededNow(visibleTargets: SymbolTarget[]): string[] {
+    const howl = this.upcomingSymbols()[0];
+    if (howl) return [howl];
+    const nearest = visibleTargets.reduce<SymbolTarget | null>((best, t) => (!best || t.x < best.x ? t : best), null);
+    return nearest ? [...new Set(nearest.wants ?? [nearest.next!])] : [];
   }
 
   private emitHeard(h: HeardEntry) {
@@ -338,10 +523,10 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     gameAudio.pluck(midis, { gain: 0.45, strumMs: 14 });
   }
 
+  /** A wrong chord: a few grey sparks from the lute (the bubble says what was needed). */
   private fizzle(ev: NoteEvent) {
     const h = this.hero;
     burst(this, h.x + 40, h.y - 90, { tint: [0xbfbfbf, 0xffffff], count: 5, speed: 90, gravityY: 0, scale: 0.5 });
-    popup(this, h.x + 30, h.y - 170, `${playedLabel(ev)}?`, "#d9d2c0", 22, 450);
     this.playFeedback(ev);
   }
 
@@ -441,7 +626,7 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     const sym = this.symbols.heal;
     const badge = symbolChip(this, sym, this.keyHint(sym), "small");
     this.fairy = { img, badge, until: now + 8000, done: false };
-    popup(this, h.x + 240, GROUND_Y - 390, `The fairy godmother! Play ${sym} to heal`, "#ffd6f2", 22, 2200).setDepth(70);
+    headline(this, "The fairy godmother!", { sub: `Play ${sym} to heal`, tone: "heal", hold: 2200 });
     gameAudio.play("heal");
   }
 
@@ -453,7 +638,7 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     h.hp = Math.min(h.maxHp, h.hp + amount);
     gameAudio.play("heal");
     burst(this, h.x, h.y - 60, { texture: "heart", tint: [0xff5f7e, 0xffd6f2], count: 12, speed: 220, gravityY: -200, lifespan: 900 });
-    popup(this, h.x, h.y - 160, `+${amount}`, "#8fe36a", 34);
+    popup(this, this.besideHero(), h.y - 118, `+${amount}`, "#8fe36a", 34);
     this.dismissFairy();
   }
 
@@ -471,22 +656,27 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     const h = this.hero;
     const cam = this.cameras.main;
     this.cinematic = true;
+    this.heardChip.hide();
     h.magic = 0;
     this.superHintShown = false;
     gameAudio.play("super");
     this.syncPhysicsPause();
-    const top = this.add.rectangle(0, -90, 1280, 90, 0x000000).setOrigin(0, 0).setScrollFactor(0).setDepth(200);
-    const bot = this.add.rectangle(0, 720, 1280, 90, 0x000000).setOrigin(0, 0).setScrollFactor(0).setDepth(200);
-    this.tweens.add({ targets: top, y: 0, duration: 250 });
-    this.tweens.add({ targets: bot, y: 630, duration: 250 });
-    cam.zoomTo(1.15, 400);
+    // Reduced motion: the letterbox is simply there, with no slide, zoom, pop or shake.
+    const still = reducedMotion();
+    const top = this.add.rectangle(0, still ? 0 : -90, 1280, 90, 0x000000).setOrigin(0, 0).setScrollFactor(0).setDepth(200);
+    const bot = this.add.rectangle(0, still ? 630 : 720, 1280, 90, 0x000000).setOrigin(0, 0).setScrollFactor(0).setDepth(200);
+    if (!still) {
+      this.tweens.add({ targets: top, y: 0, duration: 250 });
+      this.tweens.add({ targets: bot, y: 630, duration: 250 });
+    }
+    zoomTo(this, 1.15, 400);
     const title = this.add
-      .text(640, 300, "Happily Ever After", { fontFamily: FONT, fontSize: "72px", fontStyle: "bold italic", color: "#ffe066", stroke: "#2b1a12", strokeThickness: 10 })
+      .text(640, 300, "Happily Ever After", { fontFamily: FONT, fontSize: "72px", fontStyle: "italic 800", color: "#ffe066", stroke: "#2b1a12", strokeThickness: 10 })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(210)
       .setAlpha(0)
-      .setScale(0.6);
+      .setScale(still ? 1 : 0.6);
     const sub = text(this, 640, 380, "...and they all lived happily ever after.", 30, "#fff6dc").setScrollFactor(0).setDepth(210).setAlpha(0);
     this.tweens.add({ targets: title, alpha: 1, scale: 1, duration: 500, ease: "Back.Out" });
     this.tweens.add({ targets: sub, alpha: 1, duration: 500, delay: 300 });
@@ -496,8 +686,8 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
       callback: () => burst(this, h.x + Phaser.Math.Between(-300, 600), h.y - Phaser.Math.Between(40, 300), { tint: [0xffe066, 0xffffff, 0xff9ff3], count: 8, speed: 200, gravityY: 0 }),
     });
     this.time.delayedCall(1600, () => {
-      cam.flash(350, 255, 240, 200);
-      cam.shake(400, 0.02);
+      flash(this, 350, 255, 240, 200);
+      shake(this, 400, 0.02);
       gameAudio.play("heavyHit");
       const view = cam.worldView;
       for (const e of this.enemies) {
@@ -512,9 +702,14 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     this.time.delayedCall(2300, () => {
       sparkle.remove();
       this.tweens.add({ targets: [title, sub], alpha: 0, duration: 300, onComplete: () => (title.destroy(), sub.destroy()) });
-      this.tweens.add({ targets: top, y: -90, duration: 300, onComplete: () => top.destroy() });
-      this.tweens.add({ targets: bot, y: 720, duration: 300, onComplete: () => bot.destroy() });
-      cam.zoomTo(1, 400);
+      if (reducedMotion()) {
+        top.destroy();
+        bot.destroy();
+      } else {
+        this.tweens.add({ targets: top, y: -90, duration: 300, onComplete: () => top.destroy() });
+        this.tweens.add({ targets: bot, y: 720, duration: 300, onComplete: () => bot.destroy() });
+      }
+      zoomTo(this, 1, 400);
       this.cinematic = false;
     });
   }
@@ -537,21 +732,33 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
         break;
       }
     }
-    if (!frozen && h.hp > 0 && now >= this.dashUntil) h.setVelocityX(blocked ? 0 : this.walkSpeed);
+    let homing = false;
+    if (!frozen && h.hp > 0 && now >= this.dashUntil) {
+      const back = this.homeVelocity(now);
+      homing = back !== 0;
+      h.setVelocityX(homing ? back : blocked ? 0 : this.walkSpeed);
+    }
     h.facing = 1;
     if (h.x < 40) h.x = 40;
     if (h.x > this.worldWidth - 40) h.x = this.worldWidth - 40;
-    h.tick(now, dt, !blocked && !frozen && this.walkSpeed > 0);
+    h.tick(now, dt, homing || (!blocked && !frozen && this.walkSpeed > 0));
 
     for (const e of this.enemies) {
       e.tick(now);
       e.animate(now);
     }
-    this.stackBadges();
+    this.stackBadges(this.focusEnemy());
     this.enemies = this.enemies.filter((e) => e.active);
     this.tickCandies(dt, frozen);
     this.tickFairy(now);
     this.tickScene(now, dt);
+
+    // The bard's triangle: the plate to read (a size up, with the beat frame) and the bubble over the bard.
+    const focusEnemy = this.focusEnemy();
+    for (const e of this.enemies) e.setFocus(e === focusEnemy, !!focusEnemy);
+    const focus = this.focusTarget(focusEnemy);
+    this.drawBeatFrame(focus?.bounds ?? null, focusEnemy);
+    this.heardChip.follow(h.x, h.y, focus?.bounds);
 
     if (now - this.lastHudAt > 100) {
       this.lastHudAt = now;
@@ -563,22 +770,100 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
     }
   }
 
-  /** Foes walking close together: stack their chord badges so each stays readable. */
-  private stackBadges() {
-    const placed: { x: number; y: number; hw: number }[] = [];
+  /**
+   * An arena's bard steps back to their post (heroHomeX) once a knockback has read: up to HOME_SPEED px/s,
+   * easing in over the last few px. 0 = no home, not yet, or there.
+   */
+  private homeVelocity(now: number): number {
+    const home = this.heroHomeX();
+    if (home === null || now < this.dashUntil + HOME_BEAT_MS) return 0;
+    const d = home - this.hero.x;
+    if (Math.abs(d) < 1) {
+      this.hero.x = home;
+      return 0;
+    }
+    return Math.sign(d) * Phaser.Math.Clamp(HOME_EASE * Math.abs(d), HOME_MIN_SPEED, HOME_SPEED);
+  }
+
+  /**
+   * Foes walking close together: stack their plates (by their real size, keycaps included) so each stays readable.
+   * Next to the plate to read the gap is wider, so its beat frame closes on that plate alone.
+   */
+  private stackBadges(focus: Enemy | null) {
+    const placed: { x: number; y: number; hw: number; h: number; focus: boolean }[] = [];
     const alive = this.enemies.filter((e) => e.alive).sort((a, b) => a.x - b.x);
     for (const e of alive) {
-      const hw = Math.max(30, e.badgeHalfWidth);
+      const hw = e.badgeHalfWidth;
+      const h = e.badgeHeight;
+      const x = e.badgeX;
+      const isFocus = e === focus;
       let lift = 0;
       for (let guard = 0; guard < 4; guard++) {
         const y = e.badgeY - lift;
-        const hit = placed.some((p) => Math.abs(p.x - e.x) < p.hw + hw + 6 && Math.abs(p.y - y) < 52);
-        if (!hit) break;
-        lift += 56;
+        const hits = placed.filter((p) => Math.abs(p.x - x) < p.hw + hw + 6 && Math.abs(p.y - y) < (p.h + h) / 2 + 4);
+        if (!hits.length) break;
+        lift += h + (isFocus || hits.some((p) => p.focus) ? FOCUS_GAP : 8);
       }
       e.badgeLift = lift;
-      placed.push({ x: e.x, y: e.badgeY - lift, hw });
+      placed.push({ x, y: e.badgeY - lift, hw, h, focus: isFocus });
     }
+  }
+
+  /** The foe to read now: the nearest one in view that still shows a chord. */
+  protected focusEnemy(): Enemy | null {
+    const view = this.cameras.main.worldView;
+    let best: Enemy | null = null;
+    for (const e of this.enemies) {
+      if (e.alive && e.next && e.x > view.x && e.x < view.right - 10 && (!best || e.x < best.x)) best = e;
+    }
+    return best;
+  }
+
+  /** The plate the player should be reading: the nearest foe's, or (boss) the wolf's chip. */
+  focusTarget(e = this.focusEnemy()): FocusPlate | null {
+    if (!e) return this.focusExtra();
+    return {
+      get bounds() {
+        return e.badgeBounds;
+      },
+      nudge: () => e.nudge(),
+    };
+  }
+
+  /**
+   * A gold frame that closes on the focus plate and lands on every beat (a blink under reduced motion).
+   * It stays 4 px short of any other foe's plate, so it never brackets two; while plates overlap for a
+   * moment (a stack settling, two foes walking in at the edge) it waits.
+   */
+  private drawBeatFrame(b: Phaser.Geom.Rectangle | null, focusEnemy: Enemy | null) {
+    const g = this.beatFrame.clear();
+    const m = this.music;
+    if (!b || !m?.playing || this.cinematic) return;
+    const off = m.offsetToNearestBeat(performance.now());
+    if (off === null) return;
+    const beatMs = 60000 / m.bpm;
+    const until = off < 0 ? -off : beatMs - off;
+    const p = 1 - Math.min(1, until / beatMs);
+    const room = this.plateClearance(b, focusEnemy) - 4;
+    if (room < 0) return;
+    const still = reducedMotion();
+    const pad = Math.min(still ? 6 : 6 + 34 * (1 - p), room);
+    const a = still ? (until < 90 || beatMs - until < 90 ? 1 : 0.3) : 0.3 + 0.65 * p;
+    const [x, y, w, h, r] = [b.x - pad, b.y - pad, b.width + 2 * pad, b.height + 2 * pad, 14 + pad * 0.3];
+    g.lineStyle(7, C.ink, a * 0.5).strokeRoundedRect(x, y, w, h, r);
+    g.lineStyle(4, C.gold, a).strokeRoundedRect(x, y, w, h, r);
+  }
+
+  /** How far `b` can grow on every side before it touches another foe's plate (Infinity: none near). */
+  private plateClearance(b: Phaser.Geom.Rectangle, focusEnemy: Enemy | null): number {
+    let room = Infinity;
+    for (const e of this.enemies) {
+      if (e === focusEnemy || !e.alive || !e.next) continue;
+      const o = e.badgeBounds;
+      // A frame grown by `pad` meets o once pad passes both the horizontal and the vertical gap.
+      room = Math.min(room, Math.max(o.left - b.right, b.left - o.right, o.top - b.bottom, b.top - o.bottom));
+    }
+    return room;
   }
 
   protected emitHud() {
@@ -593,35 +878,31 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
       superSymbol: this.symbols.super,
       wanted: this.wantedSymbols(),
       playMode: session.playMode,
+      cinematic: this.cinematic,
       ...this.hudExtra(),
     };
     EventBus.emit(EV.hud, state);
   }
 
-  /** What the chord helper should show: on-screen foes' chords (nearest first), then heal/super. */
+  /** What the chord helper shows, threats first: the next howl, foes nearest-first, then heal, then super. */
   private wantedSymbols(): NonNullable<HudState["wanted"]> {
     const view = this.cameras.main.worldView;
     const out: NonNullable<HudState["wanted"]> = [];
     const seen = new Set<string>();
+    const add = (symbol: string, role: NonNullable<HudState["wanted"]>[number]["role"]) => {
+      if (seen.has(symbol)) return;
+      seen.add(symbol);
+      out.push({ symbol, role });
+    };
+    const howl = this.upcomingSymbols()[0];
+    if (howl) add(howl, "howl");
     const targets = this.allTargets()
       .filter((t) => t.alive && t.next && t.x < view.right + 40 && t.x > view.x - 40)
       .sort((a, b) => a.x - b.x);
-    for (const t of targets) {
-      for (const symbol of t.wants ?? [t.next!]) {
-        if (seen.has(symbol)) continue;
-        seen.add(symbol);
-        out.push({ symbol, role: "foe" });
-      }
-    }
-    const howl = this.upcomingSymbols()[0];
-    if (howl) {
-      const at = out.findIndex((w) => w.symbol === howl);
-      if (at >= 0) out.splice(at, 1);
-      out.unshift({ symbol: howl, role: "howl" });
-    }
-    if (this.fairy && !this.fairy.done) out.unshift({ symbol: this.symbols.heal, role: "heal" });
-    if (this.hero.magic >= 100) out.unshift({ symbol: this.symbols.super, role: "super" });
-    return out.slice(0, 3);
+    for (const t of targets) for (const symbol of t.wants ?? [t.next!]) add(symbol, "foe");
+    if (this.fairy && !this.fairy.done) add(this.symbols.heal, "heal");
+    if (this.hero.magic >= 100) add(this.symbols.super, "super");
+    return out.slice(0, 4);
   }
 
   private removeCandy(c: Candy, popped: boolean) {
@@ -685,6 +966,8 @@ export abstract class FightScene extends Phaser.Scene implements EnemyHost {
   private cleanup() {
     this.unsubNote?.();
     this.unsubNote = null;
+    this.unsubDiag?.();
+    this.unsubDiag = null;
     this.music?.stop();
     this.music = null;
   }

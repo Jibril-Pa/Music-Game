@@ -544,14 +544,20 @@ export function water(width: number, depth: number, colors: { deep: number; ligh
 }
 
 // ------------------------------------------------------------------ text
-/** A signboard with painted text (canvas texture). */
-export function textTexture(text: string, opts: { w?: number; h?: number; bg?: string; ink?: string; font?: string; border?: string } = {}): THREE.CanvasTexture {
+/**
+ * A signboard with painted text (canvas texture). Sizes are in board units; `scale`
+ * rasterises the canvas that many times larger (same look, more texels) for boards that
+ * are big on screen. Code drawing into `texture.image` afterwards draws in board units too.
+ */
+export function textTexture(text: string, opts: { w?: number; h?: number; bg?: string; ink?: string; font?: string; border?: string; scale?: number } = {}): THREE.CanvasTexture {
   const w = opts.w ?? 512;
   const h = opts.h ?? 128;
+  const s = opts.scale ?? 1;
   const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
+  c.width = Math.round(w * s);
+  c.height = Math.round(h * s);
   const g = c.getContext("2d")!;
+  g.scale(s, s);
   g.fillStyle = opts.bg ?? "#c89055";
   g.fillRect(0, 0, w, h);
   if (opts.border) {

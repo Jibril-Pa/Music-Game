@@ -24,6 +24,21 @@ export const PALETTE = {
   red: 0xc8553d,
 };
 
+/** Tiny shared details that keep the hand-drawn cast visually related. */
+function glint(g: G, x: number, y: number, r = 2, color = 0xffffff) {
+  g.fillStyle(color, 0.9).fillCircle(x, y, r);
+  g.fillStyle(color, 0.45).fillCircle(x - r * 0.8, y - r * 0.8, r * 0.45);
+}
+
+function seam(g: G, x1: number, y1: number, x2: number, y2: number, steps: number, color = 0xf6e7c1) {
+  for (let i = 0; i < steps; i++) {
+    const t = (i + 0.3) / steps;
+    const x = x1 + (x2 - x1) * t;
+    const y = y1 + (y2 - y1) * t;
+    g.fillStyle(color, 0.82).fillCircle(x, y, 1.25);
+  }
+}
+
 // ------------------------------------------------------------------- hero
 export type HeroPose = "idle" | "walk1" | "walk2" | "walk3" | "walk4" | "strum1" | "strum2" | "hurt";
 
@@ -70,6 +85,13 @@ function hero(g: G, pose: HeroPose) {
   poly(g, pts(45, 58, 59, 58, 52, 69), 0xf2c14e, 3); // gold collar
   rrect(g, 32, 87, 40, 7, 2, 0x5a3418, 3); // belt
   rrect(g, 47, 85.5, 10, 10, 2, PALETTE.gold, 3); // buckle
+  // Embroidered hems, a shoulder clasp and cuffs make the bard read at a
+  // glance even when the character is scaled down during play.
+  seam(g, 35, 101, 69, 101, 6, 0xf7d36a);
+  circle(g, 39, 66, 3.2, PALETTE.gold, 1.5);
+  g.fillStyle(0xb7e4b5, 0.8).fillTriangle(39, 72, 43, 78, 35, 78);
+  g.fillStyle(0xf2c14e, 1).fillRect(60, 70, 5, 12);
+  line(g, 65, 72, 68, 78, 1.5, 0xffe7a1);
 
   // lute: neck, pegbox, pear-shaped body, rosette, strings
   stick(g, 62, 88, 99, 57, 6, 0x7a4a24);
@@ -81,6 +103,7 @@ function hero(g: G, pose: HeroPose) {
   g.fillStyle(0xa86a28, 1).fillEllipse(54, 96, 20, 12);
   g.lineStyle(2, 0xf2c14e, 1).strokeCircle(61, 88, 6.5);
   g.fillStyle(OUT, 1).fillCircle(61, 88, 4.5);
+  g.lineStyle(1.5, 0xf6e7c1, 0.82).beginPath().arc(61, 88, 3, 0.1, Math.PI * 1.8, false).strokePath();
   g.lineStyle(1.2, 0xfff6dc, 0.95);
   for (const d of [-1.6, 0, 1.6]) g.lineBetween(51 + d * 0.6, 96 + d, 99 + d * 0.6, 57 + d);
   rrect(g, 49, 94, 7, 4, 1, 0x5a3418, 2); // bridge
@@ -113,6 +136,7 @@ function hero(g: G, pose: HeroPose) {
   }
   g.fillStyle(0xf08a7a, 0.6).fillEllipse(64, 49.5, 8, 4.5);
   g.fillStyle(0xe8a87c, 1).fillCircle(71, 45, 2.4);
+  glint(g, 57, 31, 1.4, 0xffe8b3);
 
   // floppy cap with a long golden feather
   poly(g, pts(36, 23, 14, 3, 19, 1, 44, 18), PALETTE.gold, 3);
@@ -121,6 +145,7 @@ function hero(g: G, pose: HeroPose) {
   g.fillStyle(0x9c2832, 1).fillEllipse(66, 21, 26, 13);
   g.fillStyle(0xd8545c, 1).fillEllipse(46, 13, 16, 6);
   ellipse(g, 54, 26, 48, 9, 0x7d1f28, 3);
+  seam(g, 37, 26, 68, 27, 5, 0xffc7b7);
   g.restore();
 }
 
@@ -154,6 +179,13 @@ function wolf(g: G, open = false, look: WolfLook = WOLF_LOOKS.forest) {
   stick(g, 94, 60, 96, 84, 9, look.mid);
   ellipse(g, 62, 52, 84, 42, look.body);
   ellipse(g, 66, 62, 48, 14, look.light, 0);
+  // The layered chest ruff and paws make the three wolf variants feel like a
+  // designed family instead of palette swaps.
+  poly(g, pts(51, 46, 60, 62, 68, 47, 76, 62, 84, 48, 89, 59, 80, 68, 60, 70, 45, 61), look.light, 0);
+  for (const x of [30, 50, 82, 96]) {
+    g.fillStyle(look.light, 0.55).fillEllipse(x, 83, 14, 5);
+    line(g, x - 3, 82, x - 1, 86, 1.25, look.dark);
+  }
   if (look.robot) {
     line(g, 40, 40, 84, 40, 3, look.dark);
     for (const x of [44, 62, 80]) g.fillStyle(OUT, 1).fillCircle(x, 50, 2.5);
@@ -170,7 +202,7 @@ function wolf(g: G, open = false, look: WolfLook = WOLF_LOOKS.forest) {
   circle(g, 131, 37, 4, OUT, 0);
   circle(g, 104, 33, 5, look.eye, 3);
   g.fillStyle(OUT, 1).fillCircle(106, 33, 2.2);
-  g.fillStyle(0xffffff, 1).fillCircle(106.8, 31.6, 1);
+  glint(g, 106.8, 31.6, 1);
   line(g, 97, 27, 109, 28, 3); // angry brow
   if (look.robot) {
     line(g, 96, 20, 92, 4, 3);
@@ -183,9 +215,15 @@ function goblin(g: G) {
   stick(g, 48, 70, 52, 94, 8, 0x4f8a36);
   rrect(g, 22, 50, 38, 32, 10, 0x6fae4c);
   poly(g, pts(22, 74, 60, 74, 56, 88, 26, 88), 0x7a5230, 4);
+  g.fillStyle(0x4a7431, 1).fillTriangle(28, 58, 38, 50, 38, 74).fillTriangle(48, 50, 58, 58, 48, 74);
+  rrect(g, 24, 72, 34, 6, 2, 0x5a3418, 2);
+  circle(g, 41, 75, 3.5, PALETTE.gold, 1.5);
   poly(g, pts(14, 26, 30, 30, 26, 40), 0x6fae4c, 4); // ear
   poly(g, pts(70, 22, 56, 30, 60, 40), 0x6fae4c, 4);
+  poly(g, pts(17, 29, 26, 32, 24, 36), 0xe2a97b, 0);
+  poly(g, pts(67, 25, 59, 32, 61, 36), 0xe2a97b, 0);
   circle(g, 44, 36, 19, 0x7cc25a);
+  poly(g, pts(31, 24, 40, 12, 45, 24, 50, 11, 57, 27), 0x486c2f, 3);
   circle(g, 52, 32, 5, 0xfff07a, 3);
   g.fillStyle(0xc0392b, 1).fillCircle(53, 32, 2.5);
   g.fillStyle(0xffffff, 1).fillCircle(54, 30.8, 1);
@@ -194,6 +232,7 @@ function goblin(g: G) {
   line(g, 44, 46, 56, 48, 3);
   stick(g, 60, 64, 82, 22, 7, 0x8a5a33); // club
   circle(g, 82, 20, 9, 0x8a5a33);
+  for (const y of [17, 22]) line(g, 76, y, 87, y + 3, 1.5, 0x5a3418);
 }
 
 function troll(g: G, raised = false) {
@@ -201,8 +240,14 @@ function troll(g: G, raised = false) {
   stick(g, 108, 150, 116, 186, 18, 0x5d6e44);
   ellipse(g, 86, 112, 124, 104, 0x7c8f5c);
   g.fillStyle(0x5d6e44, 1).fillCircle(60, 96, 9).fillCircle(104, 130, 11).fillCircle(78, 140, 6);
+  // Mossy stone plates break up the big silhouette and suggest great weight.
+  for (const [x, y, r] of [[52, 118, 8], [76, 102, 6], [102, 112, 7], [116, 142, 6]] as const) {
+    circle(g, x, y, r, 0x91a96b, 2);
+    g.fillStyle(0xc0cf8b, 0.48).fillCircle(x - r * 0.22, y - r * 0.25, r * 0.35);
+  }
   poly(g, pts(46, 130, 128, 130, 120, 160, 52, 160), 0x6b4a2a, 4);
   circle(g, 102, 52, 30, 0x8ea36a);
+  g.fillStyle(0x748a54, 1).fillEllipse(95, 37, 34, 12);
   ellipse(g, 128, 60, 26, 18, 0x9cb276);
   circle(g, 108, 42, 5, 0xfff07a, 3);
   g.fillStyle(OUT, 1).fillCircle(110, 42, 2.5);
@@ -216,6 +261,7 @@ function troll(g: G, raised = false) {
     ellipse(g, 168, 154, 30, 26, 0x6b4226);
   }
   circle(g, 132, 106, 12, 0x8ea36a);
+  for (const x of [125, 132, 139]) line(g, x, 108, x - 2, 114, 1.5, 0x5d6e44);
 }
 
 function witch(g: G) {
@@ -223,6 +269,9 @@ function witch(g: G) {
   poly(g, pts(0, 120, 14, 112, 18, 136, 2, 140), 0xd6a447, 4);
   poly(g, pts(32, 66, 66, 66, 84, 132, 14, 132), 0x5b3b8c);
   poly(g, pts(14, 120, 84, 120, 84, 132, 14, 132), 0x3e2766, 3);
+  poly(g, pts(34, 66, 50, 70, 62, 66, 61, 105, 38, 105), 0x7c5fb1, 0);
+  rrect(g, 26, 102, 46, 7, 2, 0xd94f8c, 2);
+  circle(g, 50, 105, 4, PALETTE.gold, 1.5);
   circle(g, 50, 52, 16, 0x9fd27a);
   poly(g, pts(62, 50, 76, 58, 62, 60), 0x8cc266, 3);
   circle(g, 56, 48, 4, 0xffffff, 2);
@@ -232,7 +281,9 @@ function witch(g: G) {
   ellipse(g, 50, 40, 60, 10, 0x2a1f3d, 4);
   poly(g, pts(30, 38, 70, 38, 60, 4, 54, 0), 0x2a1f3d);
   g.fillStyle(0xd94f8c, 1).fillRect(32, 30, 36, 5);
+  g.fillStyle(0x6c416b, 1).fillTriangle(36, 42, 44, 50, 34, 55).fillTriangle(64, 42, 56, 50, 67, 55);
   circle(g, 80, 84, 9, 0xff7eb6, 3); // candy in hand
+  glint(g, 77, 80, 2, 0xffffff);
 }
 
 export type BigWolfLook = "forest" | "sand" | "mecha";
@@ -266,12 +317,19 @@ function bigWolf(g: G, pose: "idle" | "huff" | "hurt", variant: BigWolfLook = "f
   // torso + vest
   ellipse(g, 134, 182, 130, 140, fur);
   ellipse(g, 144, 186, 70, 96, furLight, 0);
+  // Broad fur chevrons and clothing seams give the boss a much richer read at
+  // full scale, while staying clear of the hurt/huff silhouette changes.
+  for (const [y, width] of [[160, 42], [182, 52], [204, 44]] as const) {
+    g.lineStyle(3, fur, 0.55).beginPath().moveTo(144 - width / 2, y - 8).lineTo(144, y).lineTo(144 + width / 2, y - 8).strokePath();
+  }
   poly(g, pts(82, 130, 112, 120, 112, 236, 86, 230), L.vest, 4);
   poly(g, pts(184, 130, 160, 120, 162, 236, 186, 228), L.vest, 4);
+  seam(g, 101, 135, 100, 226, 7, 0xe6c47a);
+  seam(g, 171, 134, 173, 224, 7, 0xe6c47a);
   if (variant === "mecha") {
     rrect(g, 116, 150, 52, 52, 12, 0x3e4756, 4);
     circle(g, 142, 176, 14, 0x4ef0ff, 4);
-    g.fillStyle(0xffffff, 0.8).fillCircle(137, 171, 4);
+    glint(g, 137, 171, 4);
   } else {
     g.fillStyle(0xf2c14e, 1).fillCircle(170, 160, 4).fillCircle(170, 190, 4);
   }
@@ -294,6 +352,8 @@ function bigWolf(g: G, pose: "idle" | "huff" | "hurt", variant: BigWolfLook = "f
   poly(g, pts(146, 58, 168, 18, 172, 64), fur);
   poly(g, pts(124, 30, 128, 50, 120, 50), variant === "mecha" ? 0x4ef0ff : 0xd98c8c, 0);
   circle(g, 146, 86, 46, fur);
+  // Tufted cheeks keep his three world variants recognisably the same wolf.
+  poly(g, pts(116, 90, 102, 106, 120, 106, 110, 120, 130, 114), fur, 0);
   if (pose === "huff") {
     ellipse(g, 206, 94, 70, 46, furLight); // puffed cheeks + snout
     circle(g, 238, 92, 10, OUT, 0);
@@ -307,7 +367,7 @@ function bigWolf(g: G, pose: "idle" | "huff" | "hurt", variant: BigWolfLook = "f
   if (variant === "mecha") rrect(g, 138, 62, 46, 22, 8, 0x1b2230, 4); // visor
   circle(g, 160, 74, 9, pose === "hurt" ? 0xffffff : L.eye, 3);
   g.fillStyle(OUT, 1).fillCircle(163, 74, 3.5);
-  g.fillStyle(0xffffff, 1).fillCircle(164.5, 71.5, 1.6);
+  glint(g, 164.5, 71.5, 1.6);
   if (variant !== "mecha") line(g, 146, 60, 172, 64, 5); // brow
   if (variant === "sand") {
     // turban with a jewel, ears poking out
@@ -320,6 +380,7 @@ function bigWolf(g: G, pose: "idle" | "huff" | "hurt", variant: BigWolfLook = "f
     line(g, 118, 24, 112, 6, 3);
     circle(g, 112, 5, 4, 0xff4d5e, 2);
     for (const [x, y] of [[124, 112], [168, 108], [104, 160]]) g.fillStyle(OUT, 1).fillCircle(x, y, 3);
+    for (const [x, y] of [[58, 142], [76, 190], [190, 142], [176, 194]]) circle(g, x, y, 3, 0x4ef0ff, 1.5);
   }
 }
 
@@ -516,14 +577,19 @@ export function buildTextures(scene: Phaser.Scene) {
     // wings
     g.fillStyle(0xd9f6ff, 0.85).fillEllipse(24, 40, 36, 52).fillEllipse(66, 40, 36, 52);
     g.lineStyle(3, OUT, 0.6).strokeEllipse(24, 40, 36, 52).strokeEllipse(66, 40, 36, 52);
+    g.lineStyle(1.5, 0x9fd6ef, 0.8).lineBetween(24, 20, 38, 61).lineBetween(66, 20, 52, 61);
     // dress + head
     poly(g, pts(45, 44, 64, 92, 26, 92), 0xff9fd0, 4);
+    poly(g, pts(45, 47, 54, 86, 45, 90), 0xffc9e3, 0);
+    g.fillStyle(0xf6e7c1, 1).fillRect(38, 48, 14, 4);
     circle(g, 45, 34, 13, 0xf2c49b, 4);
     g.fillStyle(0xd9d9d9, 1).fillEllipse(45, 24, 28, 12);
     g.fillStyle(OUT, 1).fillCircle(49, 33, 2);
+    glint(g, 50, 31.8, 0.8);
     // wand with a star
     stick(g, 60, 62, 80, 30, 3, 0xf6e7c1);
     star(g, 80, 26, 10, 0xffe066);
+    glint(g, 78, 23, 1.5);
   }, paper);
   buildWorldTextures(scene);
   make(scene, "campfire", 140, 120, (g) => {

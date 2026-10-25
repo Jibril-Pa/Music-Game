@@ -3,9 +3,10 @@
  *
  * The Big Bad Wolf has stolen the Hourglass of Ages and fled through time.
  * The bard follows him across three worlds (eras), each with two walking
- * levels and a boss fight against the wolf. Every level is harder than the
- * last: faster foes that hit harder, more foes that need several chords,
- * faster music.
+ * levels and a boss fight against the wolf. Every level is a little harder
+ * than the last: faster foes that hit harder, more foes that need several
+ * chords, faster music. The steps are small on purpose (players are learning
+ * chord changes), and the first stretch of a new world is a warm-up.
  *
  * Plain data (no Phaser), shared by the scenes and the React menus.
  */
@@ -136,9 +137,9 @@ export const BOSSES: Record<WorldId, BossDef> = {
     pup: "pup",
     gustTint: 0xe8f4ff,
     gustLines: ["I'll huff... and I'll puff...", "...and blow you away!"],
-    leadMs: 1900,
+    leadMs: 2200,
     missDamage: 4,
-    pupEveryMs: [2600, 3800],
+    pupEveryMs: [3000, 4400],
     huffs: 1,
     demo: { title: "The Wolf's Waltz", bpm: 104 },
     defeat: "The wolf grabs the Hourglass of Ages and leaps into a time portal!",
@@ -151,9 +152,9 @@ export const BOSSES: Record<WorldId, BossDef> = {
     pup: "jackal",
     gustTint: 0xf3c77e,
     gustLines: ["I'll huff... and I'll puff...", "...and bury you in sand!"],
-    leadMs: 1750,
+    leadMs: 2050,
     missDamage: 5,
-    pupEveryMs: [2300, 3400],
+    pupEveryMs: [2800, 4000],
     huffs: 1,
     demo: { title: "Dance of the Dunes", bpm: 110 },
     defeat: "He's slipping away through time again!",
@@ -166,9 +167,9 @@ export const BOSSES: Record<WorldId, BossDef> = {
     pup: "robopup",
     gustTint: 0x8ff6ff,
     gustLines: ["TURBO HUFF... TURBO PUFF...", "...MAXIMUM BLOW-AWAY!"],
-    leadMs: 1600,
+    leadMs: 1900,
     missDamage: 6,
-    pupEveryMs: [2000, 3000],
+    pupEveryMs: [2600, 3700],
     huffs: 2,
     demo: { title: "Robo-Wolf Rumble", bpm: 118 },
     defeat: "The Hourglass of Ages is whole again!",
@@ -186,7 +187,7 @@ export const LEVELS: LevelDef[] = [
     night: false,
     length: 9400,
     landmarks: { "troll-bridge": 4300, "witch-house": 7300 },
-    difficulty: { walkSpeed: 150, foeSpeed: 1, foeDamage: 1, toughness: 1, bpm: 100 },
+    difficulty: { walkSpeed: 150, foeSpeed: 0.8, foeDamage: 1, toughness: 1, bpm: 100 },
     goal: { sign: "Moonlit Wood →", icon: "🌙" },
     outro: "Night falls over the forest...",
     spawns: [
@@ -207,7 +208,7 @@ export const LEVELS: LevelDef[] = [
     night: true,
     length: 9200,
     landmarks: { beanstalk: 4300 },
-    difficulty: { walkSpeed: 155, foeSpeed: 1.08, foeDamage: 1.1, toughness: 1.2, bpm: 104 },
+    difficulty: { walkSpeed: 152, foeSpeed: 0.83, foeDamage: 1.05, toughness: 1.08, bpm: 104 },
     goal: { sign: "Three Little Pigs →", icon: "🐺" },
     outro: "The Big Bad Wolf awaits...",
     spawns: [
@@ -232,12 +233,13 @@ export const LEVELS: LevelDef[] = [
     night: false,
     length: 9400,
     landmarks: { "sesame-cave": 4600 },
-    difficulty: { walkSpeed: 160, foeSpeed: 1.12, foeDamage: 1.2, toughness: 1.35, bpm: 106 },
+    difficulty: { walkSpeed: 154, foeSpeed: 0.86, foeDamage: 1.1, toughness: 1.16, bpm: 106 },
     goal: { sign: "The Sphinx's Road →", icon: "🐪" },
     outro: "The road to the Sphinx...",
     spawns: [
-      s(400, "scorpion"), s(800, "thief"), s(1100, "scorpion"), s(1160, "scorpion"), s(1600, "mummy"), s(2000, "thief"), s(2060, "thief"),
-      s(2500, "scorpion"), s(2900, "mummy"), s(2960, "scorpion"), s(3300, "thief"),
+      // A warm-up for the new world: three chords, then four, until the cave.
+      s(400, "scorpion", 1), s(800, "thief", 1), s(1100, "scorpion", 1), s(1160, "scorpion", 1), s(1600, "mummy", 2), s(2000, "thief", 2), s(2060, "thief", 2),
+      s(2500, "scorpion", 2), s(2900, "mummy", 2), s(2960, "scorpion", 2), s(3300, "thief", 2),
       s(3550, "sesame-cave"),
       s(5000, "fairy"),
       s(5300, "scorpion"), s(5360, "scorpion"), s(5700, "mummy"), s(5760, "thief"), s(6200, "thief"), s(6260, "thief"), s(6700, "scorpion"),
@@ -252,7 +254,7 @@ export const LEVELS: LevelDef[] = [
     night: true,
     length: 9600,
     landmarks: { sphinx: 5200 },
-    difficulty: { walkSpeed: 165, foeSpeed: 1.18, foeDamage: 1.3, toughness: 1.5, bpm: 110 },
+    difficulty: { walkSpeed: 156, foeSpeed: 0.89, foeDamage: 1.15, toughness: 1.24, bpm: 110 },
     goal: { sign: "The Wolf's Oasis →", icon: "🐺" },
     outro: "The Wolf of the Dunes awaits...",
     spawns: [
@@ -275,12 +277,13 @@ export const LEVELS: LevelDef[] = [
     night: false,
     length: 9400,
     landmarks: { "laser-gate": 4600 },
-    difficulty: { walkSpeed: 170, foeSpeed: 1.24, foeDamage: 1.4, toughness: 1.65, bpm: 114 },
+    difficulty: { walkSpeed: 158, foeSpeed: 0.92, foeDamage: 1.2, toughness: 1.32, bpm: 114 },
     goal: { sign: "Neon Skyway →", icon: "🌃" },
     outro: "Up to the Neon Skyway...",
     spawns: [
-      s(400, "drone"), s(800, "tinsoldier"), s(1100, "drone"), s(1160, "drone"), s(1600, "tinsoldier"), s(1660, "tinsoldier"), s(2100, "mech"),
-      s(2600, "drone"), s(2640, "drone"), s(3000, "tinsoldier"), s(3300, "drone"),
+      // A warm-up for the new world: three chords, then four, until the gate.
+      s(400, "drone", 1), s(800, "tinsoldier", 1), s(1100, "drone", 1), s(1160, "drone", 1), s(1600, "tinsoldier", 2), s(1660, "tinsoldier", 2), s(2100, "mech", 2),
+      s(2600, "drone", 2), s(2640, "drone", 2), s(3000, "tinsoldier", 2), s(3300, "drone", 2),
       s(3550, "laser-gate"),
       s(5000, "fairy"),
       s(5200, "mech"), s(5600, "drone"), s(5640, "drone"), s(5680, "drone"), s(6100, "tinsoldier"), s(6160, "tinsoldier"), s(6600, "mech"),
@@ -295,7 +298,7 @@ export const LEVELS: LevelDef[] = [
     night: true,
     length: 9600,
     landmarks: { nightingale: 5200 },
-    difficulty: { walkSpeed: 175, foeSpeed: 1.3, foeDamage: 1.5, toughness: 1.8, bpm: 118 },
+    difficulty: { walkSpeed: 160, foeSpeed: 0.95, foeDamage: 1.25, toughness: 1.4, bpm: 118 },
     goal: { sign: "Hourglass Tower →", icon: "⏳" },
     outro: "MECHA-WOLF 3000 awaits...",
     spawns: [

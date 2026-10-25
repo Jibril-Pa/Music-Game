@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { LOGICAL_H, LOGICAL_W, enableHiDpi } from "./hidpi";
 import { Boot } from "./scenes/Boot";
 import { Boss } from "./scenes/Boss";
 import { End } from "./scenes/End";
@@ -6,8 +7,9 @@ import { Journey } from "./scenes/Journey";
 import { Title } from "./scenes/Title";
 import { Tune } from "./scenes/Tune";
 
-export const GAME_WIDTH = 1280;
-export const GAME_HEIGHT = 720;
+/** The game's LOGICAL size: every scene works in these pixels, whatever the screen's density (hidpi.ts). */
+export const GAME_WIDTH = LOGICAL_W;
+export const GAME_HEIGHT = LOGICAL_H;
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -25,6 +27,13 @@ const config: Phaser.Types.Core.GameConfig = {
   // would open a second AudioContext for nothing.
   audio: { noAudio: true },
   scene: [Boot, Title, Tune, Journey, Boss, End],
+  callbacks: {
+    // Device-resolution backbuffer behind the logical 1280x720 (crisp on high-DPI screens).
+    postBoot: (game) => {
+      const off = enableHiDpi(game);
+      game.events.once(Phaser.Core.Events.DESTROY, off);
+    },
+  },
 };
 
 export default function StartGame(parent: string) {

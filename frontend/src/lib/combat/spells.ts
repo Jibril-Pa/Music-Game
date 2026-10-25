@@ -133,7 +133,8 @@ export function fingeringFor(symbol: string, mode: PlayMode): Fingering {
   return { label: symbol, notes: NOTE_SPOTS[symbol] };
 }
 
-const CHORD_PCS: Record<string, number[]> = { Em: [4, 7, 11], G: [7, 11, 2], D: [2, 6, 9], C: [0, 4, 7], Am: [9, 0, 4], A: [9, 1, 4], E: [4, 8, 11] };
+/** Pitch classes of each chord (0 = C ... 11 = B). */
+export const CHORD_PCS: Record<string, number[]> = { Em: [4, 7, 11], G: [7, 11, 2], D: [2, 6, 9], C: [0, 4, 7], Am: [9, 0, 4], A: [9, 1, 4], E: [4, 8, 11] };
 
 /**
  * The chord (from `pool`) that best fits a moment of a song, given how much

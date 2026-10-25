@@ -1,9 +1,10 @@
 "use client";
 
-import { RHYTHM_CONFIG } from "@/lib/combat/rhythm";
 import { SYMBOL_SETS, fingeringFor, symbolKind, type PlayMode } from "@/lib/combat/spells";
 import { keyFor } from "@/lib/input/noteInput";
+import { Legend } from "./ChordHelper";
 import Fretboard from "./Fretboard";
+import Modal from "./Modal";
 
 interface Props {
   playMode: PlayMode;
@@ -15,54 +16,66 @@ interface Props {
 function Card({ symbol, mode, title, text, accent }: { symbol: string; mode: PlayMode; title?: string; text?: string; accent?: string }) {
   const key = keyFor(symbol, symbolKind(mode));
   return (
-    <section className={`sb-move ${accent ?? ""}`}>
-      <div className="cb-head">
-        <span className="sb-pill">
-          {symbol}
-          <small>{key ? `key ${key}` : ""}</small>
-        </span>
-        {title && <h3>{title}</h3>}
+    <section className={`cb-card${accent ? ` ${accent}` : ""}`}>
+      <div className="cb-card-head">
+        <span className="cb-pill">{symbol}</span>
+        {key && <kbd title={`Keyboard: ${key}`}>{key}</kbd>}
+        {title && <h4>{title}</h4>}
       </div>
+      <Fretboard fingering={fingeringFor(symbol, mode)} variant="book" />
       {text && <p>{text}</p>}
-      <Fretboard fingering={fingeringFor(symbol, mode)} size={0.95} />
     </section>
   );
 }
 
-/** How to play + every chord (or note) the game asks for, with diagrams. */
+/** When each foe symbol joins the game (in the order SYMBOL_SETS introduces them). */
+function joins(i: number): string {
+  return i < 2 ? "From the very start." : i === 2 ? "Joins early in 1-1." : "Joins halfway through 1-1.";
+}
+
+/** How to play + every chord (or note) the game asks for, as songbook chord boxes. */
 export default function ChordBook({ playMode, practice, onPractice, onClose }: Props) {
   const set = SYMBOL_SETS[playMode];
-  const what = playMode === "chords" ? "chord" : "note";
+  const chords = playMode === "chords";
+  const what = chords ? "chord" : "note";
   return (
-    <div className="gm-modal" role="dialog" aria-label="Chord Book">
-      <div className="gm-panel spellbook">
-        <header className="sb-head">
-          <h2>The Bard&apos;s {playMode === "chords" ? "Chord" : "Note"} Book</h2>
-          <button className="gm-btn" onClick={onClose}>
+    <Modal labelledBy="cb-h" initialFocus=".cb-close" className="cb-modal">
+      <div className="gm-panel cb">
+        <div className="cb-head">
+          <h2 id="cb-h">The Bard&rsquo;s {chords ? "Chord" : "Note"} Book</h2>
+          <button className="gm-btn cb-close" onClick={onClose}>
             Close
           </button>
-        </header>
-        <p className="sb-intro">
-          The bard walks on their own. Every foe shows a {what} over its head: play it and <b>every foe showing that {what}</b> is hit. Tougher foes need
-          a few, in any order. Wrong {what}s just fizzle. Play on the beat for <b>Perfect</b> (more magic), and the music follows whatever you play.
-          {playMode === "chords" ? " No guitar? Each card shows its key." : " Open strings are all you need."}
+        </div>
+        <p className="cb-intro">
+          The bard walks on their own. Every foe shows a {what} over its head: play it, and every foe showing that {what} is hit. Tougher foes show a few{" "}
+          {what}s: play them in any order. Wrong {what}s just fizzle. {chords ? "Strum" : "Pluck"} right on the beat for <b>Perfect</b> (more magic):
+          listen for the drum, or watch the gold frame close on the foe&rsquo;s {what}. {chords ? "No guitar? Each card shows its key." : "Open strings are all you need."}
         </p>
-        <label className="sb-practice">
-          <input type="checkbox" checked={practice} onChange={(e) => onPractice(e.target.checked)} /> Practice mode: wider timing (Perfect ±
-          {RHYTHM_CONFIG.practicePerfectMs} ms, howls ±320 ms){playMode === "chords" ? ", and the chord's root note alone also counts" : ""}
+        <Legend mode={playMode} className="cb-legend" />
+        <label className="sb-switch cb-practice">
+          <input type="checkbox" role="switch" checked={practice} onChange={(e) => onPractice(e.target.checked)} />
+          <span>Practice mode</span>
+          <small>{chords ? "More time around the beat. A chord’s root note alone also counts (an E for Em)." : "More time around the beat."}</small>
         </label>
         <h3 className="cb-section">Foes ask for</h3>
-        <div className="sb-grid">
+        <div className="cb-grid">
           {set.enemy.map((s, i) => (
-            <Card key={s} symbol={s} mode={playMode} text={i < 2 ? "From the very start." : i === 2 ? "Joins after the first wolves." : "Shows up deeper in the forest."} />
+            <Card key={s} symbol={s} mode={playMode} text={joins(i)} />
           ))}
         </div>
         <h3 className="cb-section">Magic</h3>
-        <div className="sb-grid">
+        <div className="cb-grid">
           <Card symbol={set.heal} mode={playMode} title="Fairy godmother" text={`When the fairy appears, play ${set.heal} to heal 25%.`} accent="heal" />
-          <Card symbol={set.super} mode={playMode} title="Happily Ever After" text={`With a full magic meter, play ${set.super}: every foe on screen vanishes.`} accent="super" />
+          <Card
+            symbol={set.super}
+            mode={playMode}
+            title="Happily Ever After"
+            text={`With a full magic meter, play ${set.super}: every foe on screen vanishes.`}
+            accent="super"
+          />
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

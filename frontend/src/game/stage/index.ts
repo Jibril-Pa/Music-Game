@@ -6,6 +6,7 @@
  */
 
 import type Phaser from "phaser";
+import { ensureFallbackArt } from "../art-pipeline";
 import type { WorldSpec } from "./scaffold";
 import { Stage3D } from "./Stage3D";
 import { buildWorld3d } from "./worlds3d";
@@ -33,6 +34,8 @@ function tick() {
 /** Create the 3D canvas behind Phaser's (call once the game exists). */
 export function mountStage(game: Phaser.Game, container: HTMLElement): boolean {
   unmountStage(game);
+  // Dev only: ?no3d tries the game the way it runs without WebGL 3D (2D backdrops).
+  if (process.env.NODE_ENV !== "production" && new URLSearchParams(window.location.search).has("no3d")) return false;
   try {
     stage = new Stage3D(container);
   } catch (err) {
@@ -55,11 +58,15 @@ export function unmountStage(game?: Phaser.Game) {
 
 /** Show a 3D world behind `scene` and follow its camera. False = no 3D: draw 2D instead. */
 export function showWorld(scene: Phaser.Scene, spec: WorldSpec): boolean {
-  if (!stage) return false;
+  if (!stage) {
+    ensureFallbackArt(scene); // the 2D backdrops and scenery are drawn on first use
+    return false;
+  }
   try {
     stage.setWorld(JSON.stringify(spec), () => buildWorld3d(spec));
   } catch (err) {
     console.warn("[stage] couldn't build the 3D world; using 2D", err);
+    ensureFallbackArt(scene);
     return false;
   }
   const c = scene.cameras.main;

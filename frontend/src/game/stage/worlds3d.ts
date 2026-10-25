@@ -805,7 +805,8 @@ function future(spec: WorldSpec): StageWorld {
 function checkpoint(b: WorldBuilder, x: number, night: boolean) {
   const g = new THREE.Group();
   g.position.set(x, 0, -1.7);
-  const hazard = K.textTexture("", { w: 64, h: 256, bg: "#f2c14e" });
+  // 4x texels: the posts are tall on screen (the stripes would blur otherwise). Drawn in 64x256 board units.
+  const hazard = K.textTexture("", { w: 64, h: 256, bg: "#f2c14e", scale: 4 });
   const ctx = (hazard.image as HTMLCanvasElement).getContext("2d")!;
   ctx.fillStyle = "#1b1b24";
   for (let y = -64; y < 320; y += 48) {
@@ -828,7 +829,7 @@ function checkpoint(b: WorldBuilder, x: number, night: boolean) {
   }
   const beam = K.outlined(new THREE.BoxGeometry(5.6, 0.7, 0.7), K.toon(night ? 0x3e4756 : 0x6b7584), 0.04);
   beam.position.set(0, 5.2, 0);
-  const tex = K.textTexture("CHECKPOINT", { w: 512, h: 96, bg: "#120c26", ink: "#ff4d5e", border: "#ff4d5e", font: "bold 60px Arial, sans-serif" });
+  const tex = K.textTexture("CHECKPOINT", { w: 512, h: 96, bg: "#120c26", ink: "#ff4d5e", border: "#ff4d5e", font: "bold 60px Arial, sans-serif", scale: 2 });
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.6), new THREE.MeshBasicMaterial({ map: tex, fog: true }));
   sign.position.set(0, 5.2, 0.37);
   g.add(beam, sign);
@@ -856,10 +857,11 @@ function clockTower(b: WorldBuilder, x: number, night: boolean) {
   const top = K.outlined(new THREE.ConeGeometry(2.6, 3, 4).rotateY(Math.PI / 4), K.toon(night ? 0xe8c14a : 0xc9a43a), 0.06);
   top.position.y = 10.5;
   g.add(body, top);
-  // the clock face
+  // the clock face, drawn in 256-unit space on a 2x canvas (it is ~390 device px wide at DPR 2)
   const c = document.createElement("canvas");
-  c.width = c.height = 256;
+  c.width = c.height = 512;
   const ctx = c.getContext("2d")!;
+  ctx.scale(2, 2);
   ctx.fillStyle = "#fff6dc";
   ctx.beginPath();
   ctx.arc(128, 128, 122, 0, Math.PI * 2);

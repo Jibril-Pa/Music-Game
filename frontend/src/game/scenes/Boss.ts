@@ -21,10 +21,10 @@ import type { NoteEvent } from "@/lib/input/types";
 import { BigBadWolf } from "../entities/BigBadWolf";
 import { EventBus, onBus } from "../EventBus";
 import { EV, type BossSongChoice, type HudState } from "../events";
-import { FONT, GROUND_Y, burst, damageNumber, light, popup } from "../fx";
-import { BOSSES, isFinalLevel, levelAt, unlockLevel, worldNumber, type BossDef, type WorldId } from "../levels";
+import { FONT, GROUND_Y, burst, damageNumber, flash, headline, light, popup, reducedMotion, shake } from "../fx";
+import { BOSSES, LEVELS, isFinalLevel, levelAt, unlockLevel, type BossDef, type JourneyLevel, type WorldId } from "../levels";
 import { session } from "../state";
-import { FightScene, symbolChip, type SymbolTarget } from "./FightScene";
+import { FightScene, chipPlate, symbolChip, type FocusPlate, type Parry, type SymbolTarget } from "./FightScene";
 import { actorTint, showWorld } from "../stage";
 import { bossArena } from "./worlds";
 
@@ -62,6 +62,8 @@ export class Boss extends FightScene {
   private song: BossSong | null = null;
   private started = false;
   private loading = false;
+  /** From the title card and 3-2-1 until the song starts. */
+  private countingDown = false;
   private orbs: Orb[] = [];
   private spawned = new Set<string>();
   private phaseKey = -1;
@@ -81,20 +83,26 @@ export class Boss extends FightScene {
     return 260;
   }
 
+  /** The bard holds their post: knocked back, they step back to where they started (gusts are timed from there). */
+  protected heroHomeX() {
+    return this.heroStartX();
+  }
+
   create() {
     const lv = levelAt(session.level);
     this.def = lv.kind === "boss" ? lv.boss : BOSSES.forest;
     this.world = lv.world;
-    // Later worlds: faster pups that need more chords.
-    const n = worldNumber(this.world);
-    this.foeMods = { speed: 1 + 0.15 * (n - 1), damage: 1 + 0.2 * (n - 1) };
-    this.toughness = 1 + 0.3 * (n - 1);
+    // His pack is as fast and tough as the world's last walk (later worlds: faster pups that need more chords).
+    const d = LEVELS.filter((l): l is JourneyLevel => l.kind === "journey" && l.world === this.world).at(-1)?.difficulty;
+    this.foeMods = { speed: d?.foeSpeed ?? 1, damage: d?.foeDamage ?? 1 };
+    this.toughness = d?.toughness ?? 1;
     this.worldWidth = 1280;
     this.walkSpeed = 0;
     this.stage = 3;
     this.song = null;
     this.started = false;
     this.loading = false;
+    this.countingDown = false;
     this.orbs = [];
     this.spawned = new Set();
     this.phaseKey = -1;
@@ -110,8 +118,6 @@ export class Boss extends FightScene {
     onBus(this, EV.bossSongChosen, this.onSongChosen as (...a: never[]) => void);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.abort?.abort());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.abort?.abort());
-    popup(this, 640, 150, `${lv.id} · ${lv.name}`, "#ffe9a8", 34, 2000);
-    popup(this, 640, 210, this.def.name, "#ffd6a0", 60, 1800);
     EventBus.emit(EV.bossIntro, true);
   }
 
@@ -148,18 +154,24 @@ export class Boss extends FightScene {
       });
   }
 
+  /** The title card, then 3, 2, 1, Play! (the React HUD steps aside meanwhile). */
   private countdown() {
+    const lv = levelAt(session.level);
+    this.countingDown = true;
+    popup(this, 640, 150, `${lv.id} · ${lv.name}`, "#ffe9a8", 34, 2000);
+    popup(this, 640, 210, this.def.name, "#ffd6a0", 60, 1800);
     const steps = ["3", "2", "1", "Play!"];
     steps.forEach((s, i) =>
       this.time.delayedCall(i * 600, () => {
         gameAudio.play(i < 3 ? "tick" : "perfect");
-        popup(this, 640, 300, s, i < 3 ? "#ffffff" : "#ffe066", i < 3 ? 80 : 64, 500);
+        popup(this, 640, 300, s, i < 3 ? "#ffffff" : "#ffe066", i < 3 ? 80 : 64, 400);
         if (i === steps.length - 1) this.startSong();
       }),
     );
   }
 
   private startSong() {
+    this.countingDown = false;
     if (!this.song) return;
     this.music = this.song.clock;
     this.music.onBeat = (b) => {
@@ -178,7 +190,10 @@ export class Boss extends FightScene {
 
   private currentPhase(local: number): { phase: Phase; index: number } {
     const phases = this.song!.phases;
+    // The song is still starting (its first beat isn't heard yet): that's the intro.
+    if (local < 0) return { phase: phases[0], index: 0 };
     let i = phases.findIndex((p) => local >= p.start && local < p.end);
+    // A loop's last moments, after its last phase: that phase goes on.
     if (i < 0) i = phases.length - 1;
     return { phase: phases[i], index: i };
   }
@@ -235,13 +250,12 @@ export class Boss extends FightScene {
   private enterPhase(phase: Phase) {
     this.phaseKind = phase.kind;
     const what = session.playMode === "chords" ? "chord" : "note";
+    // The wolf only takes a chord between verses: anywhere else his chip would do nothing.
+    if (phase.kind !== "free") this.setWolfSymbol(null);
     if (phase.kind === "parry") {
-      this.setWolfSymbol(null);
-      popup(this, 640, 170, "Howls incoming!", "#ffe066", 40, 1200);
-      popup(this, 640, 215, `play each howl's ${what} as it reaches you`, "#fff6dc", 22, 1600);
+      headline(this, "Howls incoming!", { sub: `Play each howl's ${what} as it reaches you`, y: 176 });
     } else if (phase.kind === "free") {
-      popup(this, 640, 170, "Strike back!", "#b8f5a0", 44, 1200);
-      popup(this, 640, 215, `play the ${what} over the wolf`, "#fff6dc", 22, 1600);
+      headline(this, "Strike back!", { sub: `Play the ${what} over the wolf`, y: 176 });
       this.nextPupAt = this.time.now + 1500;
       this.setWolfSymbol(this.pickWolfSymbol());
     }
@@ -258,9 +272,24 @@ export class Boss extends FightScene {
     this.wolfSymbol = sym;
     if (sym) {
       this.wolfChip = symbolChip(this, sym, this.keyHint(sym));
-      this.wolfChip.setPosition(this.wolf.x - 30, this.wolf.y - 350).setScale(0.5);
-      this.tweens.add({ targets: this.wolfChip, scale: 1.2, duration: 200, ease: "Back.Out" });
+      this.wolfChip.setPosition(this.wolf.x - 30, this.wolf.y - 350);
+      if (reducedMotion()) this.wolfChip.setScale(1.2);
+      else {
+        this.wolfChip.setScale(0.5);
+        this.tweens.add({ targets: this.wolfChip, scale: 1.2, duration: 200, ease: "Back.Out" });
+      }
     }
+  }
+
+  /** Between verses with no pup in view, the plate to read is the wolf's own chord. */
+  protected focusExtra(): FocusPlate | null {
+    return this.phaseKind === "free" && this.wolfChip?.active ? chipPlate(this, this.wolfChip) : null;
+  }
+
+  /** The next howl's chip: it shakes its head after a wrong chord. */
+  protected howlPlate(): FocusPlate | null {
+    const next = this.orbs.filter((o) => !o.resolved).sort((a, b) => a.hitPerf - b.hitPerf)[0];
+    return next ? chipPlate(this, next.chip) : null;
   }
 
   // ---------------------------------------------------------------- huff and puff
@@ -277,7 +306,7 @@ export class Boss extends FightScene {
       if (!wolf.alive) return;
       wolf.setScale(1);
       popup(this, wolf.x - 100, wolf.y - 320, this.def.gustLines[1], "#ffffff", 30, 900);
-      this.cameras.main.shake(400, 0.005);
+      shake(this, 400, 0.005);
       const [symbol] = randomSymbols(session.playMode, 3, 1);
       const img = this.add.image(wolf.mouth.x, GROUND_Y - 130, "wind").setDepth(32).setScale(2).setFlipX(true).setTint(this.def.gustTint);
       const chip = symbolChip(this, symbol, this.keyHint(symbol));
@@ -368,7 +397,7 @@ export class Boss extends FightScene {
     this.heroHurt(this.def.missDamage, this.wolf.x, "Howl");
   }
 
-  protected interceptNote(ev: NoteEvent, _grade: Grade | null): string | null {
+  protected interceptNote(ev: NoteEvent): Parry | null {
     if (!this.started) return null;
     const win = this.window();
     let best: Orb | null = null;
@@ -378,9 +407,10 @@ export class Boss extends FightScene {
       if (d <= win && (!best || d < Math.abs(ev.time - best.hitPerf))) best = o;
     }
     if (!best) return null;
-    const grade = judge(ev.time - best.hitPerf, session.practice);
+    const offsetMs = ev.time - best.hitPerf;
+    const grade = judge(offsetMs, session.practice);
     this.parry(best, grade);
-    return grade === "perfect" ? "Perfect parry!" : "Parry!";
+    return { label: grade === "perfect" ? "Perfect! Sent back" : "Sent back!", grade, offsetMs, symbol: best.attack.symbol };
   }
 
   private parry(o: Orb, grade: Grade) {
@@ -390,9 +420,7 @@ export class Boss extends FightScene {
     this.destroyOrb(o);
     gameAudio.play("parry");
     burst(this, o.img.x, o.img.y, { tint: [0xffe066, 0xffffff, 0xc6f3ff], count: 18, speed: 300 });
-    popup(this, this.hero.x, this.hero.y - 210, grade === "perfect" ? "Perfect parry!" : "Parry!", grade === "perfect" ? "#ffd23f" : "#ffffff", 32, 600);
     this.hero.addMagic(grade === "perfect" ? 8 : 5);
-    this.hero.actionUntil = this.time.now + 160;
     const target = { x: this.wolf.x, y: this.wolf.y - 180 };
     this.tweens.add({
       targets: o.img,
@@ -495,9 +523,9 @@ export class Boss extends FightScene {
     this.music?.stop();
     gameAudio.play("victory");
     wolf.pose("hurt");
-    this.cameras.main.flash(400, 255, 240, 200);
+    flash(this, 400, 255, 240, 200);
     unlockLevel(session.level + 1);
-    popup(this, 640, 220, this.def.defeat, "#ffe066", 34, 2600);
+    headline(this, this.def.defeat, { hold: 2600 });
     for (let i = 0; i < 6; i++) {
       this.time.delayedCall(i * 250, () =>
         burst(this, Phaser.Math.Between(200, 1080), Phaser.Math.Between(150, 400), { tint: [0xffe066, 0xff9ff3, 0x8fe36a, 0x58c7ff], count: 20, speed: 320 }),
@@ -516,7 +544,7 @@ export class Boss extends FightScene {
     gameAudio.play("wind");
     this.tweens.add({ targets: wolf, x: 1190, scale: 0.2, alpha: 0, angle: 180, duration: 1300, ease: "Cubic.In", delay: 1000 });
     this.tweens.add({ targets: wolf.shadow, alpha: 0, duration: 800, delay: 1000 });
-    this.time.delayedCall(2400, () => popup(this, 640, 300, "After him, through time!", "#b8f5ff", 40, 1600));
+    this.time.delayedCall(2400, () => headline(this, "After him, through time!", { hold: 1600 }));
     this.time.delayedCall(3600, () => this.finish(true));
   }
 
@@ -536,17 +564,26 @@ export class Boss extends FightScene {
     this.time.delayedCall(4600, () => this.finish(true));
   }
 
-  protected hudExtra(): Partial<HudState> {
+  /**
+   * The phase instruction: one line per phase, so the banner can settle (only a live gust interrupts the
+   * free phase). It never names a chord: the wolf's comes and goes as he staggers and huffs.
+   */
+  private objective(): string {
     const what = session.playMode === "chords" ? "chord" : "note";
-    let label = "Choose the wolf's song";
-    if (this.loading) label = "Loading the song...";
-    else if (this.started && this.song) {
-      label =
-        this.phaseKind === "parry" ? `Howls: play each ${what} as it reaches you` : this.phaseKind === "free" ? `Strike back: play the ${what} over the wolf` : "Get ready...";
-    } else if (this.song) label = "Get ready...";
+    if (this.loading) return "Loading the song…";
+    if (!this.started) return this.song || this.countingDown ? "Get ready…" : "Choose the wolf's song";
+    if (this.phaseKind === "parry") return `Howls: play each ${what} as it reaches you`;
+    if (this.phaseKind !== "free") return "Get ready…";
+    if (this.gusts.some((g) => !g.done)) return `A gust! Play its ${what} to blow it back`;
+    return `Strike back: play each ${what} the wolf shows`;
+  }
+
+  protected hudExtra(): Partial<HudState> {
+    const label = this.objective();
     return {
       boss: this.wolf ? { name: this.def.name, hp: this.wolf.hp, maxHp: this.wolf.maxHp, phase: label } : null,
       objective: label,
+      cinematic: this.countingDown || this.cinematic,
     };
   }
 }

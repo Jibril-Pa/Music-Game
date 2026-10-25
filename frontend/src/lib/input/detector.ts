@@ -74,6 +74,11 @@ export const DETECT_CONFIG = {
   chordMinScore: 0.72,
   /** ...and lead over the second-best chord ("clearly ahead"). */
   chordMargin: 0.02,
+  /** At the timeout, a chord that came out on top in this share of the checks (at least 4) counts
+   * even if it was never clearly ahead: a crowd blurs the margin, not the winner (0 = off)... */
+  chordConsistentShare: 0.75,
+  /** ...if its mean score is within this much of chordMinScore. */
+  chordConsistentSlack: 0.02,
   /** Subtract this much of the pre-onset chroma (strings still ringing from the last chord). */
   chordPreWeight: 0.5,
   /** Hops of a new, confident pitch class while a note rings = new note (legato)... */
@@ -106,14 +111,26 @@ export const DETECT_CONFIG = {
   swellRatio: 1.12,
   /** At decision time the sound must still be this fraction of its peak. */
   minSustain: 0.3,
-  /** Onsets must be this many times the background level. */
+  /** Onsets must be this many times the background level... */
   floorOnsetFactor: 3,
-  /** Background level = this percentile of recent quiet hops... */
+  /** ...but the background never raises that bar above this fraction of your own strums
+   * (before a few are heard: of the loudest recent sound, which fades by half this often). */
+  floorCapOfPlayer: 0.3,
+  loudestHalfLifeMs: 3000,
+  /** Background level = this percentile of recent hops... */
   floorPercentile: 0.2,
-  /** ...over about this many hops (~5 s), only while nothing is ringing... */
+  /** ...over about this many hops (~5 s)... */
   floorWindowHops: 450,
-  /** ...and no onset (not even a rejected one) for this long. */
+  /** ...while no note or chord of yours has been heard for this long, and nothing is being
+   * decided. A crowd (talking, other guitars) counts: it never goes quiet, so it is the background. */
   floorQuietMs: 1500,
+  /** A ringing sound is over once it falls below this many times the background (or minRms). */
+  releaseFloorFactor: 1.5,
+  /** After a sound that wasn't guitar, ignore new onsets this long (the rest of that sound)... */
+  rejectDeafMs: 50,
+  /** ...and while deciding, a new attack this many times louder than the sound so far starts over
+   * (a strum right after someone's clap or shout). */
+  preemptRatio: 2,
   /** Re-hearing what was already ringing needs the level to jump this much. */
   restrikeGain: 1.45,
   /** Ignore sounds that add less than this fraction of what your recent playing added... */
@@ -135,6 +152,11 @@ export const GAME_CHORDS: Record<ChordName, Chord> = {
 };
 const CHORD_LIST = GAME_CHORD_NAMES.map((n) => GAME_CHORDS[n]);
 
+function median(a: readonly number[]): number {
+  const s = [...a].sort((x, y) => x - y);
+  return s[s.length >> 1];
+}
+
 export interface Detection {
   type: "note" | "chord";
   /** Peak level (RMS) right after the onset... */
@@ -155,6 +177,8 @@ export interface DetectorDiag {
   rms: number;
   /** Learned background level (RMS). */
   noiseFloor: number;
+  /** How loud your notes/chords have been (RMS at their peak), once a few are heard; else null. */
+  playerLevel: number | null;
   /** Sounds ignored as not-guitar so far (voices, clicks, swells...). */
   ignored: number;
   hz: number | null;
@@ -191,8 +215,15 @@ export class NoteDetector {
   private floorRms = 0;
   private floorHf = 0;
   private hopsSinceFloor = 0;
-  /** What recently accepted notes/chords added to the level (how hard the player plays). */
+  /** What recently accepted notes/chords added to the level (how hard the player plays)... */
   private recentAdded: number[] = [];
+  /** ...and their peak levels. */
+  private recentPeaks: number[] = [];
+  /** The loudest recent hop, fading. */
+  private loudest = 0;
+  /** When the last note/chord was accepted, and when a sound was last rejected. */
+  private lastAccepted = -Infinity;
+  private lastRejected = -Infinity;
   /** Level just before the current onset, and what was ringing then. */
   private preLevel = 0;
   private ringing: string | null = null;
@@ -205,6 +236,8 @@ export class NoteDetector {
   private onsetTime = 0;
   private readings: Reading[] = [];
   private chromaSum: Float32Array | null = null;
+  /** The best chord of every check while deciding (the timeout looks for a consistent winner). */
+  private chordVotes: ChordCheck[] = [];
   private preChroma: Float32Array | null = null;
   private lastChordName: ChordName | null = null;
   private sawConfidentPitch = false;
@@ -226,6 +259,9 @@ export class NoteDetector {
     this.floorIdx = this.floorCount = this.hopsSinceFloor = 0;
     this.floorRms = this.floorHf = 0;
     this.recentAdded = [];
+    this.recentPeaks = [];
+    this.loudest = 0;
+    this.lastAccepted = this.lastRejected = -Infinity;
     this.preLevel = 0;
     this.ringing = null;
     this.ringingState = null;
@@ -262,8 +298,8 @@ export class NoteDetector {
     if (this.prevHops.length > 3) this.prevHops.shift();
     if (this.prevHf.length > 3) this.prevHf.shift();
 
-    // Background level, learned only while nothing has happened for a while.
-    if (this.state === "idle" && endTime - this.lastOnset >= c.floorQuietMs) {
+    // Background level, learned while none of your playing has been heard for a while.
+    if (this.state !== "deciding" && endTime - this.lastAccepted >= c.floorQuietMs) {
       this.floorRing[this.floorIdx] = hopRms;
       this.floorHfRing[this.floorIdx] = hf;
       this.floorIdx = (this.floorIdx + 1) % c.floorWindowHops;
@@ -278,17 +314,34 @@ export class NoteDetector {
         this.floorHf = pct(this.floorHfRing);
       }
     }
-    const onsetMinRms = Math.max(c.onsetMinRms, this.floorRms * c.floorOnsetFactor);
+    // Above the background, but never more than a fraction of how loud you play (until we know,
+    // the loudest recent sound: up close, that's usually your guitar).
+    this.loudest = Math.max(hopRms, this.loudest * 0.5 ** (hopMs / c.loudestHalfLifeMs));
+    const playerPeak = this.recentPeaks.length >= c.relativeAfter ? median(this.recentPeaks) : this.loudest;
+    const onsetMinRms = Math.max(c.onsetMinRms, Math.min(this.floorRms * c.floorOnsetFactor, c.floorCapOfPlayer * playerPeak));
     const onsetHfMin = Math.max(c.onsetHfMin, this.floorHf * c.floorOnsetFactor);
 
     let detection: Detection | null = null;
     const louder = hopRms > prev * c.onsetRatio && hopRms - prev >= c.onsetMinJump;
     const transient = hf >= onsetHfMin && hf > prevHf * c.onsetHfRatio;
+    // While a sound is being decided, a much louder new attack starts over (the crowd's sound
+    // came first, your strum right after it).
+    const preempt = this.state === "deciding" && hopRms >= c.preemptRatio * Math.max(...this.env, this.preLevel);
     const onset =
       hopRms >= onsetMinRms &&
       (louder || transient) &&
-      endTime - this.lastOnset >= c.debounceMs &&
-      endTime - this.lastEvent >= c.debounceMs;
+      (endTime - this.lastOnset >= c.debounceMs || preempt) &&
+      endTime - this.lastAccepted >= c.debounceMs &&
+      endTime - this.lastRejected >= c.rejectDeafMs;
+    if (this.debug && !onset && (louder || transient) && hopRms >= c.onsetMinRms) {
+      const why = [
+        hopRms < onsetMinRms && `under the bar ${onsetMinRms.toFixed(3)}`,
+        endTime - this.lastOnset < c.debounceMs && !preempt && `${Math.round(endTime - this.lastOnset)} ms after an onset (${this.state})`,
+        endTime - this.lastAccepted < c.debounceMs && `${Math.round(endTime - this.lastAccepted)} ms after an event`,
+        endTime - this.lastRejected < c.rejectDeafMs && `${Math.round(endTime - this.lastRejected)} ms after a rejection`,
+      ].filter(Boolean);
+      this.debug(`no onset @${(endTime / 1000).toFixed(3)} rms ${hopRms.toFixed(3)} prev ${prev.toFixed(3)}: ${why.join(", ")}`);
+    }
     if (onset) {
       this.debug?.(`onset @${(endTime / 1000).toFixed(3)} rms ${hopRms.toFixed(3)} prev ${prev.toFixed(3)} (was ${this.state})`);
       this.lastOnset = endTime;
@@ -304,13 +357,14 @@ export class NoteDetector {
       this.state = "deciding";
       this.readings = [];
       this.chromaSum = null;
+      this.chordVotes = [];
       this.sawConfidentPitch = false;
       this.change = null;
       this.env = [];
     }
     if (this.state === "deciding") this.env.push(hopRms);
 
-    if (hopRms < c.minRms) {
+    if (hopRms < Math.max(c.minRms, this.floorRms * c.releaseFloorFactor)) {
       if (++this.quietHops >= c.releaseHops && this.state !== "deciding") {
         this.state = "idle";
         this.sustainPc = null;
@@ -376,6 +430,7 @@ export class NoteDetector {
       diag: {
         rms: hopRms,
         noiseFloor: this.floorRms,
+        playerLevel: this.recentPeaks.length >= c.relativeAfter ? median(this.recentPeaks) : null,
         ignored: this.ignored,
         hz,
         pitchConfidence: conf,
@@ -388,7 +443,7 @@ export class NoteDetector {
   }
 
   private emitted(d: Detection, endTime: number) {
-    this.lastEvent = endTime;
+    this.lastEvent = this.lastAccepted = endTime;
     this.state = d.type;
     this.sustainPc = d.type === "note" ? d.pitchClass : null;
     this.lastChordName = d.type === "chord" ? (d.chord ?? null) : null;
@@ -494,6 +549,25 @@ export class NoteDetector {
     return { pc, midi: midis[midis.length >> 1], hz: mine[0].hz, conf: mine.reduce((s, x) => s + x.conf, 0) / mine.length };
   }
 
+  /**
+   * Last chance for a chord at the timeout: the same chord came out on top in most checks, with a
+   * fair score, though never clearly ahead (a crowd's sound blurs the margin, not the winner).
+   */
+  private consistentChord(): { name: ChordName; score: number } | null {
+    const c = this.cfg;
+    const v = this.chordVotes;
+    if (!c.chordConsistentShare || v.length < 4) return null;
+    const count = new Map<ChordName, number>();
+    for (const x of v) count.set(x.name, (count.get(x.name) ?? 0) + 1);
+    const [name, n] = [...count].sort((a, b) => b[1] - a[1])[0];
+    if (n < c.chordConsistentShare * v.length) return null;
+    const mine = v.filter((x) => x.name === name);
+    const score = mine.reduce((s, x) => s + x.score, 0) / mine.length;
+    const margin = mine.reduce((s, x) => s + x.margin, 0) / mine.length;
+    this.debug?.(`  consistent ${name}: ${n}/${v.length}, score ${score.toFixed(3)} margin ${margin.toFixed(3)}`);
+    return score >= c.chordMinScore - c.chordConsistentSlack && margin > 0 ? { name, score } : null;
+  }
+
   /** Shape of the sound since the onset: attack time, still swelling, still ringing. */
   private envelope() {
     const env = this.env;
@@ -578,6 +652,7 @@ export class NoteDetector {
     } else if (!waiting && elapsed >= c.chordCheckMs && !this.sawConfidentPitch) {
       // Several strings ringing: PitchYin never got sure of one pitch.
       const chord = this.checkChord(frame, sampleRate);
+      if (chord) this.chordVotes.push(chord);
       if (chord?.ok) {
         if (env.attack > c.chordAttackHops) return this.reject("slow attack (not a strum)", endTime);
         if (!env.sustained) return this.reject("didn't ring on (click/tap)", endTime);
@@ -587,8 +662,11 @@ export class NoteDetector {
     if (!d && elapsed >= c.decisionTimeoutMs) {
       const lateReading = env.swelling ? null : this.timeoutNote();
       const late = lateReading && this.overBass(lateReading, frame, sampleRate, endTime);
+      const steady = late ? null : this.consistentChord();
       if (late && env.attack <= c.noteAttackHops && env.sustained) {
         d = { type: "note", pitchClass: late.pc, midi: late.midi, onsetTime: this.onsetTime, confidence: late.conf, via: "timeout" };
+      } else if (steady && !env.swelling && env.attack <= c.chordAttackHops && env.sustained) {
+        d = { type: "chord", pitchClass: pitchClassOf(GAME_CHORDS[steady.name].root), chord: steady.name, onsetTime: this.onsetTime, confidence: steady.score, via: "timeout" };
       } else {
         // No clean note or chord in time: drop it rather than guess.
         this.drop(env.swelling ? "kept swelling (voice?)" : this.readings.length ? "pitch never steady" : "no pitch, no chord");
@@ -609,6 +687,8 @@ export class NoteDetector {
     d.rise = rise;
     this.recentAdded.push(added);
     if (this.recentAdded.length > 8) this.recentAdded.shift();
+    this.recentPeaks.push(env.peak);
+    if (this.recentPeaks.length > 8) this.recentPeaks.shift();
     this.emitted(d, endTime);
     return d;
   }
@@ -616,12 +696,14 @@ export class NoteDetector {
   /** The last event turned out not to be the player (e.g. the game's own sound): don't learn from it. */
   retract(): void {
     this.recentAdded.pop();
+    this.recentPeaks.pop();
   }
 
   private reject(why: string, endTime: number): null {
     this.drop(why);
-    // Stay deaf to the rest of this sound, like after a real event.
-    this.lastEvent = endTime;
+    // Stay deaf to the rest of this sound for a moment (not as long as after a real event:
+    // in a crowd, your strum may come right after it).
+    this.lastEvent = this.lastRejected = endTime;
     return null;
   }
 }

@@ -4,6 +4,7 @@
  */
 
 import type Phaser from "phaser";
+import { defineArt } from "./art-pipeline";
 
 export const OUT = 0x2b1a12;
 export const LW = 5;
@@ -24,17 +25,13 @@ export const PAPER_PAD = 8;
  * Draws once into a texture (skipped if it already exists). `paper` gives a
  * character the 2.5D storybook finish: soft light from the top-left, a white
  * paper edge and a lifted shadow, so it reads as a cut-out standing in the
- * 3D world.
+ * 3D world. The finish is deliberately applied after drawing so every pose
+ * in a character set gets exactly the same ink-and-paper treatment.
  */
 export function make(scene: Phaser.Scene, key: string, w: number, h: number, draw: (g: G) => void, opts: { paper?: boolean } = {}) {
-  if (scene.textures.exists(key)) return;
   const pad = opts.paper ? PAPER_PAD : 0;
-  const g = scene.make.graphics({ x: 0, y: 0 }, false);
-  if (pad) g.translateCanvas(pad, pad);
-  draw(g);
-  g.generateTexture(key, w + pad * 2, h + pad);
-  g.destroy();
-  if (pad) paperize(scene, key);
+  // Recorded, not drawn here: art-pipeline.ts uses the baked PNG or draws it at 2x (2D-fallback art at 1x).
+  defineArt(scene, { key, w: w + pad * 2, h: h + pad, pad, draw, finish: pad ? paperize : undefined });
 }
 
 function silhouette(src: HTMLCanvasElement, color: string): HTMLCanvasElement {
@@ -49,47 +46,64 @@ function silhouette(src: HTMLCanvasElement, color: string): HTMLCanvasElement {
   return c;
 }
 
-function paperize(scene: Phaser.Scene, key: string) {
-  const tex = scene.textures.get(key);
-  const src = tex.getSourceImage() as HTMLCanvasElement;
-  if (typeof HTMLCanvasElement === "undefined" || !(src instanceof HTMLCanvasElement)) return;
+/**
+ * The paper finish, on a canvas drawn at k x the logical size: every pixel-space
+ * constant below is logical px x k, so a k x render is the same design at k times
+ * the resolution (`npm run bake-art` checks it against the 1x render).
+ */
+export function paperize(src: HTMLCanvasElement, k: number) {
   const ctx = src.getContext("2d");
   if (!ctx) return;
   const w = src.width;
   const h = src.height;
+  const lw = Math.round(w / k);
+  const lh = Math.round(h / k);
   const orig = document.createElement("canvas");
   orig.width = w;
   orig.height = h;
   orig.getContext("2d")!.drawImage(src, 0, 0);
-  // Volume: light from the top-left, shade towards the bottom-right.
+  // Volume: a warm top-left key light and cool lower shade give even the
+  // small sprites a hand-painted dimensionality without blurring their ink.
   ctx.save();
   ctx.globalCompositeOperation = "source-atop";
   const grad = ctx.createLinearGradient(0, 0, w * 0.9, h);
-  grad.addColorStop(0, "rgba(255,247,228,0.22)");
+  grad.addColorStop(0, "rgba(255,250,231,0.28)");
   grad.addColorStop(0.5, "rgba(255,247,228,0)");
-  grad.addColorStop(1, "rgba(36,18,64,0.24)");
+  grad.addColorStop(1, "rgba(38,22,62,0.28)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
+  // Sparse, deterministic paper fibres stop large flat colour areas from
+  // reading as clip art. source-atop keeps them strictly inside the sprite.
+  for (let i = 0; i < Math.max(18, Math.floor((lw * lh) / 260)); i++) {
+    const x = (i * 47 + 19) % lw;
+    const y = (i * 83 + 31) % lh;
+    ctx.fillStyle = i % 3 === 0 ? "rgba(85,47,34,0.075)" : "rgba(255,250,226,0.12)";
+    ctx.fillRect(x * k, y * k, (i % 5 === 0 ? 2 : 1) * k, k);
+  }
   ctx.restore();
-  // Behind the art: white paper edge, a faint dark rim, a soft lifted shadow.
+  // Behind the art: a warm paper edge, restrained ink rim, and a soft lifted
+  // shadow. This makes allies, monsters and bosses read as one cohesive set.
   const white = silhouette(orig, "#fffaf0");
   const dark = silhouette(orig, "#1e0f0a");
+  const gold = silhouette(orig, "#f1d79a");
   ctx.save();
   ctx.globalCompositeOperation = "destination-over";
+  ctx.globalAlpha = 0.52;
+  ctx.drawImage(gold, -1.2 * k, -1.4 * k);
+  ctx.globalAlpha = 1;
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2;
-    ctx.drawImage(white, Math.cos(a) * 3.3, Math.sin(a) * 3.3);
+    ctx.drawImage(white, Math.cos(a) * 3.3 * k, Math.sin(a) * 3.3 * k);
   }
   ctx.globalAlpha = 0.3;
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2;
-    ctx.drawImage(dark, Math.cos(a) * 4.6, Math.sin(a) * 4.6);
+    ctx.drawImage(dark, Math.cos(a) * 4.6 * k, Math.sin(a) * 4.6 * k);
   }
   ctx.globalAlpha = 0.2;
-  ctx.filter = "blur(2px)";
-  ctx.drawImage(dark, 5, 3);
+  ctx.filter = `blur(${2 * k}px)`;
+  ctx.drawImage(dark, 5 * k, 3 * k);
   ctx.restore();
-  (tex as Phaser.Textures.CanvasTexture).refresh();
 }
 
 // Outlined primitives ----------------------------------------------------------

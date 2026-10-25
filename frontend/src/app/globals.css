@@ -419,27 +419,188 @@ button[type="submit"] {
 }
 
 /* ======================= /play: storybook game UI ======================= */
+/*
+ * Everything below is scoped to the game (.game-shell / .game-ui); the dev
+ * pages above keep :root. Colours, lines, radii, shadows, type and timing come
+ * from the --sb-* tokens (block 1) only. Blocks:
+ *   1 tokens · 2 fonts · 3 shell and frame · 4 game-scoped base ·
+ *   5 components (panel, plate, button, seg, switch, icon, modal) · 6 HUD ·
+ *   7 chord helper and fretboard · 8 Ear · 9 title · 10 tuner ·
+ *   11 picker / pause / book / end · 12 toast / dev / rotate ·
+ *   13 states and motion · 14 container queries
+ */
+
+/* ---------- 1. tokens ---------- */
+.game-shell,
+.game-loading {
+  --sb-ink: #2b1a12;
+  --sb-ink-2: #6b4e3a;
+  --sb-rust: #8a3b1c;
+  --sb-danger: #9b2c2c;
+  --sb-success: #2f6b34;
+  --sb-parchment: #f6e7c1;
+  --sb-paper: #fff6dc;
+  --sb-rim: #fffaf0;
+  --sb-scrim: rgb(20 12 8 / 0.55);
+  --sb-scrim-light: rgb(20 12 8 / 0.35);
+  --sb-gold: #ffd25e;
+  --sb-gold-hi: #ffdc7a;
+  --sb-gold-deep: #e0a526;
+  --sb-gold-soft: #fff1b8;
+  --sb-rose: #c8553d;
+  /* The focus ring: --sb-rose deepened until it reads 4.5:1 on this light's parchment and paper (4.66 / 5.3). */
+  --sb-focus: #ac4631;
+  --sb-heal: #ffe9f5;
+  --sb-howl: #e9f1ff;
+  --sb-boss-tint: #f3d6c2;
+  --sb-trough: #3a2418;
+  --sb-hp-hi: #ff8a7a;
+  --sb-hp-lo: #d9433a;
+  --sb-magic-hi: #ffe48a;
+  --sb-magic-lo: #e0a526;
+  --sb-boss-hi: #a58bd6;
+  --sb-boss-lo: #5b3b8c;
+  --sb-path-hi: #a8e08a;
+  --sb-path-lo: #5fa548;
+  --sb-wood: #e9c89a;
+  --sb-wood-inlay: #b8946a;
+  --sb-string: #6b4226;
+  /* The Lute's Notebook charts: one hue, two steps (validated on parchment: CVD ΔE 21.9; the light step
+     sits under 3:1, so every value is also printed as text beside its mark). */
+  --sb-chart-now: #8a3b1c;
+  --sb-chart-before: #cf7f45;
+  --sb-chart-grid: #d8c59a;
+  /* Icon fills, the tuner meter, the shell around the book and the dev overlay (not UI surfaces). */
+  --sb-icon-wolf: #8f96b8;
+  --sb-icon-sand: #f3c77e;
+  --sb-icon-night: #3b3060;
+  --sb-tune-off: #f3b2a5;
+  --sb-tune-on: #b9e8b0;
+  --sb-shell-hi: #3a2a1c;
+  --sb-shell-lo: #140d08;
+  --sb-frame-bg: #1d2a1f;
+  --sb-frame-gold: #c89055;
+  --sb-frame-shadow: rgb(0 0 0 / 0.6);
+  --sb-foot: #c9b48f;
+  --sb-foot-link: #ffd27a;
+  --sb-dev-bg: rgb(10 12 18 / 0.85);
+  --sb-dev-ink: #d6f5d6;
+  --sb-dev-dim: #a3c4a3;
+  --sb-line-1: 2px;
+  --sb-line-2: 3px;
+  --sb-line-3: 4px;
+  --sb-r-s: 0.45em;
+  --sb-r-m: 0.7em;
+  --sb-r-l: 1em;
+  --sb-r-pill: 999px;
+  --sb-lift-1: 1px 2px 0 var(--sb-ink);
+  --sb-lift-2: 2px 3px 0 var(--sb-ink);
+  --sb-lift-hover: 3px 4px 0 var(--sb-ink);
+  --sb-lift-pressed: 0 1px 0 var(--sb-ink);
+  --sb-cutout: 0 0 0 3px var(--sb-rim), 4px 6px 10px rgb(30 15 10 / 0.35); /* plates over the world */
+  --sb-page: 4px 7px 0 var(--sb-ink), 10px 18px 32px rgb(30 15 10 / 0.35); /* modal book pages */
+  --sb-font-ui: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --sb-font-display: var(--sb-font-ui);
+  --z-hud: 10;
+  --z-helper: 15;
+  --z-modal: 30;
+  --z-toast: 40;
+  --z-dev: 50;
+  --sb-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sb-dur-press: 60ms;
+  --sb-dur-gauge: 150ms;
+  --sb-dur-path: 300ms;
+  --sb-dur-beat: 450ms;
+}
+
+/* Paper lit by the world behind it (GameApp sets data-light): a little dimmer at night and under neon.
+   Ink stays 10.5:1, ink-2 4.77:1 and the focus ring 4.65:1 on the night paper. */
+.game-ui[data-light="night"] {
+  --sb-parchment: #dccca6;
+  --sb-paper: #ece0c2;
+  --sb-focus: #903b29;
+}
+
+.game-ui[data-light="neon"] {
+  --sb-parchment: #e4d9c8;
+  --sb-paper: #f0e8da;
+  --sb-focus: #9e402d;
+}
+
+/* The face swap point: STORYBOOK_TYPE in src/game/fonts.ts sets data-type (GameApp). */
+.game-shell[data-type="storybook"] {
+  --sb-font-ui: "Alegreya", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --sb-font-display: "Fraunces", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+}
+
+/* ---------- 2. fonts ---------- */
+/* Fraunces (display: SOFT 100, WONK 0, opsz 48, wght 600-900) and Alegreya (UI: wght 400-900),
+   SIL OFL 1.1, Latin subsets self-hosted in public/fonts so the game still works offline.
+   size-adjust brings Alegreya's x-height up to Georgia's, so the swap barely moves anything. */
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces-Storybook.woff") format("woff");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces-Storybook-Italic.woff") format("woff");
+  font-weight: 600 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Alegreya";
+  src: url("/fonts/Alegreya.woff") format("woff");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+  size-adjust: 106%;
+}
+
+@font-face {
+  font-family: "Alegreya";
+  src: url("/fonts/Alegreya-Italic.woff") format("woff");
+  font-weight: 400 900;
+  font-style: italic;
+  font-display: swap;
+  size-adjust: 106%;
+}
+
+/* ---------- 3. shell and frame ---------- */
 .game-shell {
-  min-height: 100vh;
-  background: radial-gradient(circle at 50% 30%, #3a2a1c, #140d08);
+  min-height: 100dvh;
+  background: radial-gradient(circle at 50% 30%, var(--sb-shell-hi), var(--sb-shell-lo));
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 12px;
-  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  color: var(--sb-ink);
+  font-family: var(--sb-font-ui);
+  font-variant-numeric: lining-nums;
 }
 
+/* The ink and gold frame is a ring (box-shadow), not a border, so the content box (both
+   canvases and the HUD) is exactly 16:9. Re-run WP-Render's drift probe after changing it. */
 .game-frame {
   position: relative;
-  width: min(100%, calc((100vh - 60px) * 16 / 9));
+  width: min(100%, calc((100dvh - 60px) * 16 / 9));
   aspect-ratio: 16 / 9;
-  border: 6px solid #2b1a12;
+  border: 0;
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 0 3px #c89055 inset;
-  background: #1d2a1f;
+  box-shadow: 0 0 0 6px var(--sb-ink), 0 0 0 9px var(--sb-frame-gold), 0 10px 40px var(--sb-frame-shadow);
+  background: var(--sb-frame-bg);
   container-type: inline-size;
+}
+
+.game-frame:focus {
+  outline: none;
 }
 
 #game-container,
@@ -471,94 +632,1042 @@ button[type="submit"] {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  color: #2b1a12;
-  font-size: clamp(11px, 1.35cqw, 17px);
+  color: var(--sb-ink);
+  font-size: clamp(12px, 1.35cqw, 26px);
+  line-height: 1.25;
 }
 
-.game-ui > * {
+/* HUD and the title / tuner / end pages: inert while a modal is open. */
+.game-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+:where(.game-hud) > * {
   pointer-events: auto;
 }
 
 .game-loading {
-  color: #f6e7c1;
+  color: var(--sb-parchment);
+  font-family: var(--sb-font-ui);
   font-size: 22px;
   padding: 40px;
 }
 
 .game-foot {
-  margin-top: 6px;
-  color: #c9b48f;
+  margin: 6px 0 0;
+  color: var(--sb-foot);
+  font-size: 13px;
+  /* On the dark shell a rose ring would vanish: the footer's links ring in their own gold. */
+  --sb-focus: var(--sb-foot-link);
 }
 
 .game-foot a {
-  color: #ffd27a;
+  color: var(--sb-foot-link);
 }
 
+/* ---------- 4. game-scoped base ---------- */
+.game-shell .muted {
+  color: var(--sb-ink-2);
+}
+
+.game-shell .small {
+  font-size: max(11px, 0.8em);
+}
+
+.game-shell kbd {
+  font-family: var(--sb-font-ui);
+  font-weight: 800;
+  color: var(--sb-ink);
+  background: var(--sb-paper);
+  border: 2px solid var(--sb-ink);
+  border-bottom-width: 3px;
+  border-radius: 0.3em;
+  padding: 0 0.35em;
+  font-size: 0.9em;
+  line-height: 1.2;
+}
+
+.game-shell ::selection {
+  background: var(--sb-gold);
+  color: var(--sb-ink);
+}
+
+.game-shell :focus-visible {
+  outline: 3px solid var(--sb-focus);
+  outline-offset: 3px;
+}
+
+/* In-game links (the picker's "Song Workshop"): rust ink, not the dev pages' cyan. Zero specificity
+   for the scope, so .game-foot a keeps its gold. */
+:where(.game-shell) a {
+  color: var(--sb-rust);
+}
+
+/* The frame takes focus when a fight starts (so keys never land on a stale menu button): no ring round the whole game. */
+.game-shell .game-frame:focus-visible {
+  outline: none;
+}
+
+.game-shell .num,
+.game-shell [data-num] {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.game-shell .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.gm-error {
+  margin: 0;
+  color: var(--sb-danger);
+  font-weight: 700;
+}
+
+/* ---------- 5. components ---------- */
+/* panel: a page of the storybook (title, tuner, end, modals) */
 .gm-panel {
-  background: #f6e7c1;
-  border: 4px solid #2b1a12;
-  border-radius: 16px;
-  box-shadow: 0 6px 0 #2b1a12, 0 10px 30px rgba(0, 0, 0, 0.35);
+  position: relative;
+  background: var(--sb-parchment);
+  border: var(--sb-line-3) solid var(--sb-ink);
+  border-radius: var(--sb-r-l);
+  box-shadow: var(--sb-page);
   padding: 1em 1.2em;
-  color: #2b1a12;
+  color: var(--sb-ink);
 }
 
 .gm-panel h2 {
-  margin: 0 0 0.4em;
+  font-family: var(--sb-font-display);
+  font-weight: 800;
   font-size: 1.7em;
+  line-height: 1.1;
+  margin: 0 0 0.4em;
 }
 
+/* plate: a paper cut-out lifted off the world (HUD) */
+.plate {
+  background: var(--sb-parchment);
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-m);
+  box-shadow: var(--sb-cutout);
+  color: var(--sb-ink);
+}
+
+/* button: one family. Gold fill = "do this" (one primary per page). */
 .gm-btn {
-  font-family: inherit;
-  font-size: 1em;
+  font: inherit;
   font-weight: 700;
-  color: #2b1a12;
-  background: #fff6dc;
-  border: 3px solid #2b1a12;
-  border-radius: 12px;
+  line-height: 1.2;
+  color: var(--sb-ink);
+  background: var(--sb-paper);
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-m);
   padding: 0.45em 1em;
+  box-shadow: var(--sb-lift-2);
   cursor: pointer;
-  box-shadow: 0 3px 0 #2b1a12;
-  transition: transform 0.06s;
+  transition: transform var(--sb-dur-press), box-shadow var(--sb-dur-press), background-color var(--sb-dur-press);
 }
 
-.gm-btn:hover {
-  background: #ffffff;
-}
-
-.gm-btn:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #2b1a12;
+.gm-btn:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--sb-lift-hover);
+  background: var(--sb-rim);
 }
 
 .gm-btn.primary {
-  background: #ffcf5c;
+  background: var(--sb-gold);
+}
+
+.gm-btn.primary:hover:not(:disabled) {
+  background: var(--sb-gold-hi);
+}
+
+.gm-btn:active:not(:disabled) {
+  transform: translate(1px, 2px);
+  box-shadow: var(--sb-lift-pressed);
+}
+
+.gm-btn:disabled {
+  border-style: dashed;
+  color: var(--sb-ink-2);
+  background: var(--sb-parchment);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 .gm-btn.big {
   font-size: 1.25em;
-  padding: 0.55em 1.2em;
+  padding: 0.5em 1.1em;
 }
 
-.gm-btn:disabled {
-  opacity: 0.6;
+.gm-btn small {
+  display: block;
+  font-size: max(11px, 0.62em);
+  font-weight: 600;
+  color: var(--sb-ink-2);
 }
 
-.gm-error {
-  color: #9b2c2c;
+/* segmented control: the pressed choice is ink-inverted */
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-m);
+  box-shadow: var(--sb-lift-2);
+  background: var(--sb-paper);
+}
+
+.seg > button {
+  font: inherit;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--sb-ink);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0.35em 0.8em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1em;
+  cursor: pointer;
+  transition: background-color var(--sb-dur-press);
+}
+
+.seg > button + button {
+  border-left: var(--sb-line-2) solid var(--sb-ink);
+}
+
+.seg > button:first-child {
+  border-radius: calc(var(--sb-r-m) - 3px) 0 0 calc(var(--sb-r-m) - 3px);
+}
+
+.seg > button:last-child {
+  border-radius: 0 calc(var(--sb-r-m) - 3px) calc(var(--sb-r-m) - 3px) 0;
+}
+
+.seg > button:hover:not([aria-pressed="true"]) {
+  background: var(--sb-rim);
+}
+
+.seg > button[aria-pressed="true"] {
+  background: var(--sb-ink);
+  color: var(--sb-paper);
+}
+
+.seg > button small {
+  font-size: max(11px, 0.7em);
+  font-weight: 600;
+  color: var(--sb-ink-2);
+}
+
+.seg > button[aria-pressed="true"] small {
+  color: var(--sb-gold-soft);
+}
+
+.seg > button .icon {
+  width: 1.3em;
+  height: 1.3em;
+}
+
+/* switch: replaces every checkbox (the label wraps the input) */
+.sb-switch {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.1em 0.55em;
+  align-items: center;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sb-switch input {
+  appearance: none;
+  margin: 0;
+  width: 2.3em;
+  height: 1.3em;
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-pill);
+  background: radial-gradient(circle at 30% 50%, var(--sb-ink) 0.36em, transparent 0.38em), var(--sb-paper);
+  cursor: pointer;
+}
+
+.sb-switch input:checked {
+  background: radial-gradient(circle at 70% 50%, var(--sb-gold) 0.36em, transparent 0.38em), var(--sb-ink);
+}
+
+.sb-switch input:disabled {
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.sb-switch small {
+  grid-column: 2;
+  font-size: max(11px, 0.8em);
+  font-weight: 600;
+  color: var(--sb-ink-2);
+}
+
+/* icon: ink outline + one palette fill (Icon.tsx) */
+.icon {
+  display: inline-block;
+  vertical-align: -0.22em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+.icon .f-ink { fill: currentColor; }
+.icon .f-paper { fill: var(--sb-paper); }
+.icon .f-parch { fill: var(--sb-parchment); }
+.icon .f-wood { fill: var(--sb-wood); }
+.icon .f-rose { fill: var(--sb-rose); }
+.icon .f-gold { fill: var(--sb-gold); }
+.icon .f-gold-deep { fill: var(--sb-gold-deep); }
+.icon .f-gold-soft { fill: var(--sb-gold-soft); }
+.icon .f-wolf { fill: var(--sb-icon-wolf); }
+.icon .f-sand { fill: var(--sb-icon-sand); }
+.icon .f-night { fill: var(--sb-icon-night); }
+.icon .f-portal { fill: var(--sb-boss-hi); }
+.icon .f-pine { fill: var(--sb-path-lo); }
+.icon .f-heart { fill: var(--sb-hp-lo); }
+.icon .ns { stroke: none; }
+.icon .thin { stroke-width: 1.4; }
+.icon .thick { stroke-width: 3; }
+
+/* modal: a book page over a scrim */
+.gm-modal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2%;
+  background: var(--sb-scrim);
+  z-index: var(--z-modal);
+  pointer-events: auto;
+}
+
+.gm-modal > .gm-panel {
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* book-page grain (a faint paper fibre, scrolls with the page) */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.06'/%3E%3C/svg%3E");
+  background-attachment: local;
+}
+
+.gm-modal > .gm-panel,
+.title-side .title-panel,
+.picker-list {
+  scrollbar-color: var(--sb-ink) var(--sb-parchment);
+  scrollbar-width: thin;
+}
+
+/* ---------- 6. HUD ---------- */
+/* Glance-only status in the top corners; the decision-critical triangle (foe plate,
+   NOW card, the bard's bubble) is left to the middle and the bottom-left. */
+.hud-tl,
+.hud-top,
+.hud-tr,
+.chord-helper,
+.hud-ear {
+  transition: opacity 0.2s;
+}
+
+.hud-tl {
+  position: absolute;
+  top: 2%;
+  left: 1.5%;
+  width: 24%;
+  padding: 0.35em 0.55em;
+  display: grid;
+  gap: 0.3em;
+  z-index: var(--z-hud);
+}
+
+/* A gauge row: icon | bar | ink number (never text on the fill). */
+.hud-stat {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.2em 1fr 3.4em;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.hud-stat > .icon {
+  grid-column: 1;
+  grid-row: 1;
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.hud-stat > .gm-bar {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.hud-stat > .hud-num,
+.hud-stat > .hud-super {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.hud-num {
+  justify-self: end;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--sb-ink);
+}
+
+.gm-bar {
+  position: relative;
+  height: 0.95em;
+  background: var(--sb-trough);
+  border: var(--sb-line-1) solid var(--sb-ink);
+  border-radius: var(--sb-r-pill);
+  overflow: hidden;
+}
+
+.gm-bar-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(var(--sb-hp-hi), var(--sb-hp-lo));
+  transition: transform var(--sb-dur-gauge) linear;
+}
+
+.gm-bar.magic .gm-bar-fill {
+  background: linear-gradient(var(--sb-magic-hi), var(--sb-magic-lo));
+}
+
+.gm-bar.boss .gm-bar-fill {
+  background: linear-gradient(var(--sb-boss-hi), var(--sb-boss-lo));
+}
+
+/* Magic full: a gold glow breathes around the bar (opacity only). */
+.hud-stat.magic.full::after {
+  content: "";
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  height: 0.95em;
+  border-radius: var(--sb-r-pill);
+  box-shadow: 0 0 0.5em 0.12em var(--sb-gold);
+  opacity: 0.35;
+  animation: sb-glow 1.2s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.hud-super {
+  justify-self: end;
+  min-width: 1.7em;
+  padding: 0 0.3em;
+  text-align: center;
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+  line-height: 1.2;
+  background: var(--sb-gold);
+  border: var(--sb-line-1) solid var(--sb-ink);
+  border-radius: var(--sb-r-s);
+  box-shadow: var(--sb-lift-1);
+}
+
+.hud-top {
+  position: absolute;
+  top: 2%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40%;
+  display: grid;
+  justify-items: center;
+  gap: 0.35em;
+  z-index: var(--z-hud);
+}
+
+.hud-foe {
+  width: 85%;
+  padding: 0.25em 0.6em 0.4em;
+  display: grid;
+  gap: 0.15em;
+}
+
+.hud-foe-name {
+  font-family: var(--sb-font-display);
+  font-weight: 800;
+  font-size: 1.05em;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.hud-stat.foe {
+  grid-template-columns: 1fr 4.2em;
+}
+
+.hud-stat.foe > .gm-bar {
+  grid-column: 1;
+}
+
+.hud-stat.foe > .hud-num {
+  grid-column: 2;
+}
+
+/* Walking levels: the road from here to the goal. */
+.hud-path {
+  position: relative;
+  width: 60%;
+  height: 1.05em;
+  margin: 0.45em 0 0.25em;
+  background: var(--sb-parchment);
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-pill);
+  box-shadow: var(--sb-cutout);
+}
+
+.hud-path-track {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.hud-path-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(var(--sb-path-hi), var(--sb-path-lo));
+  transition: transform var(--sb-dur-path) linear;
+}
+
+.hud-path-bard,
+.hud-path-goal {
+  position: absolute;
+  top: 50%;
+  line-height: 0;
+}
+
+/* The bard rides a full-width, zero-height track: Hud.tsx moves the track with translateX(progress),
+   the icon sits centred on its left end. */
+.hud-path-bard {
+  left: 0;
+  width: 100%;
+  height: 0;
+  transition: transform var(--sb-dur-path) linear;
+}
+
+.hud-path-bard .icon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -58%);
+}
+
+.hud-path-goal {
+  right: -0.95em;
+  transform: translateY(-50%);
+}
+
+.hud-path-bard .icon,
+.hud-path-goal .icon {
+  width: 1.7em;
+  height: 1.7em;
+}
+
+/* The objective, bannered when it changes (always on in the boss: it is the phase instruction). */
+.hud-banner {
+  max-width: 100%;
+  padding: 0.2em 0.8em 0.25em;
+  background: var(--sb-paper);
+  border-width: var(--sb-line-1);
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  animation: sb-banner-in 180ms var(--sb-ease-out);
+  transition: opacity 300ms;
+}
+
+.hud-banner[data-shown="0"] {
+  opacity: 0;
+}
+
+.hud-tr {
+  position: absolute;
+  top: 2%;
+  right: 1.5%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  z-index: var(--z-hud);
+}
+
+/* The combo plate: motivation, kept out of the bard's triangle. Rounded all round like every other
+   plate (a square end beside the pause button read as cut off). */
+.hud-combo {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
+  padding: 0.15em 0.65em 0.25em;
+  border-radius: var(--sb-r-m);
+  transform-origin: right center;
+  animation: sb-pop 200ms var(--sb-ease-out);
+}
+
+.hud-combo b {
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+  font-size: 1.6em;
+  line-height: 1;
+}
+
+.hud-combo span {
+  font-size: max(11px, 0.72em);
+  font-weight: 800;
+  color: var(--sb-ink-2);
+}
+
+.hud-combo.milestone {
+  animation: sb-pop 200ms var(--sb-ease-out), sb-milestone 600ms steps(1);
+}
+
+/* Pause: a real button (touch, mouse) with its key. */
+.hud-pause {
+  position: relative;
+  min-width: 44px;
+  min-height: 44px;
+  width: 2.5em;
+  height: 2.5em;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font: inherit;
+  color: var(--sb-ink);
+  background: var(--sb-paper);
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-m);
+  box-shadow: var(--sb-lift-2);
+  cursor: pointer;
+  transition: transform var(--sb-dur-press), box-shadow var(--sb-dur-press), background-color var(--sb-dur-press);
+}
+
+.hud-pause:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--sb-lift-hover);
+  background: var(--sb-rim);
+}
+
+.hud-pause:active {
+  transform: translate(1px, 2px);
+  box-shadow: var(--sb-lift-pressed);
+}
+
+.hud-pause .icon {
+  width: 1.25em;
+  height: 1.25em;
+}
+
+.hud-pause .hud-esc {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: -0.85em;
+  transform: translateX(-50%);
+  font-size: max(11px, 0.6em);
+  line-height: 1.1;
+  pointer-events: none;
+}
+
+@media (pointer: fine) {
+  .hud-pause .hud-esc {
+    display: block;
+  }
+}
+
+/* The super cinematic and the boss countdown: the HUD steps aside. */
+.game-hud[data-cinematic] :is(.hud-tl, .hud-top, .hud-tr, .chord-helper, .hud-ear) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- 7. chord helper and fretboard ---------- */
+/* Bottom-left: the one zone no foe walks into, on the eye's way back from the fretboard. */
+.chord-helper {
+  position: absolute;
+  left: 1.5%;
+  bottom: 2.5%;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.45em;
+  pointer-events: none;
+  z-index: var(--z-helper);
+}
+
+.ch-card {
+  position: relative;
+}
+
+.ch-card.now {
+  display: grid;
+  justify-items: center;
+  gap: 0.15em;
+  padding: 0.35em 0.5em 0.45em;
+  box-shadow: 0 0 0 0.2em var(--sb-gold), var(--sb-cutout);
+}
+
+.ch-card.role-heal {
+  background: var(--sb-heal);
+}
+
+.ch-card.role-super {
+  background: var(--sb-gold-soft);
+}
+
+.ch-card.role-howl {
+  background: var(--sb-howl);
+}
+
+/* Between foes the last chord stays put (no flicker), resting: the paper stays opaque, its edge turns
+   dashed and loses the gold ring, and only what is printed on it fades. Waiting, not an instruction. */
+.ch-card.idle {
+  background: var(--sb-parchment);
+  border-style: dashed;
+  box-shadow: var(--sb-cutout);
+}
+
+.ch-card.idle > * {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+
+.ch-role {
+  font-style: normal;
+  font-size: max(11px, 0.72em);
+  font-weight: 800;
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  color: var(--sb-rust);
+}
+
+.ch-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.ch-name {
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+  font-size: 2.2em;
+  line-height: 1;
+}
+
+/* .game-shell kbd (0.9em) would win over a bare .ch-key. */
+.game-shell .ch-key {
+  font-size: 1.2em;
+}
+
+.ch-caption {
+  font-size: max(11px, 0.8em);
+  font-weight: 700;
+  color: var(--sb-ink-2);
+}
+
+.ch-legend {
+  margin: 0;
+  max-width: 11em;
+  display: grid;
+  justify-items: center;
+  font-size: max(11px, 0.7em);
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--sb-ink-2);
+}
+
+.ch-mark {
+  width: 0.95em;
+  height: 0.95em;
+  vertical-align: -0.12em;
+  overflow: visible;
+}
+
+.ch-x {
+  font-weight: 800;
+  color: var(--sb-danger);
+}
+
+.ch-card.next {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.25em 0.35em;
+}
+
+.ch-card.next .ch-name {
+  font-weight: 800;
+  font-size: 1.25em;
+}
+
+/* The beat: a gold ring leaves the card on every beat (secondary to the frame closing on the foe). */
+.ch-card.now::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ch-card.now[data-beat="a"]::after {
+  animation: sb-beat-a var(--sb-dur-beat) var(--sb-ease-out);
+}
+
+.ch-card.now[data-beat="b"]::after {
+  animation: sb-beat-b var(--sb-dur-beat) var(--sb-ease-out);
+}
+
+/* A resting card keeps still: nothing on it is wanted on this beat (beats reduced motion's blink too). */
+.ch-card.now.idle[data-beat]::after {
+  animation: none;
+}
+
+/* The songbook chord box (Fretboard.tsx), sized in em. */
+.fretboard {
+  display: block;
+  height: auto;
+  overflow: visible;
+}
+
+.fb-now {
+  width: 7.8em;
+}
+
+.fb-mini {
+  width: 3.4em;
+}
+
+.fb-book {
+  width: 9em;
+}
+
+.fb-wood {
+  fill: var(--sb-wood);
+}
+
+.fb-inlay {
+  fill: var(--sb-wood-inlay);
+}
+
+.fb-string {
+  stroke: var(--sb-string);
+}
+
+.fb-line {
+  stroke: var(--sb-ink);
+}
+
+.fb-nut {
+  fill: var(--sb-ink);
+}
+
+.fb-dot {
+  fill: var(--sb-rose);
+  stroke: var(--sb-ink);
+}
+
+.fb-digit {
+  fill: var(--sb-paper);
+  font-family: var(--sb-font-ui);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.fb-open {
+  fill: none;
+  stroke: var(--sb-rose);
+}
+
+.fb-mute {
+  fill: var(--sb-danger);
+  font-family: var(--sb-font-ui);
+  font-size: 13px;
   font-weight: 700;
 }
 
-.game-ui kbd {
-  font-family: inherit;
+.fb-name {
+  fill: var(--sb-ink-2);
+  font-family: var(--sb-font-ui);
+  font-size: 12px;
   font-weight: 700;
-  background: #fff6dc;
-  border: 2px solid #2b1a12;
-  border-radius: 6px;
-  padding: 0 0.35em;
-  font-size: 0.9em;
 }
 
+/* ---------- 8. Ear ---------- */
+/* What the game heard: the last four, newest on the right, for players and judges. */
+.hud-ear {
+  position: absolute;
+  right: 1.5%;
+  bottom: 2.5%;
+  max-width: 27%;
+  padding: 0.3em 0.45em 0.35em;
+  display: grid;
+  gap: 0.25em;
+  z-index: var(--z-hud);
+}
+
+.ear-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: max(11px, 0.78em);
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--sb-ink-2);
+}
+
+.ear-title .icon {
+  width: 1.3em;
+  height: 1.3em;
+  color: var(--sb-ink);
+}
+
+.ear-meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.12em;
+  height: 0.9em;
+}
+
+.ear-meter i {
+  width: 0.26em;
+  background: var(--sb-paper);
+  border: 1.5px solid var(--sb-ink);
+  border-radius: 1px;
+}
+
+.ear-meter i:nth-child(1) {
+  height: 40%;
+}
+
+.ear-meter i:nth-child(2) {
+  height: 70%;
+}
+
+.ear-meter i:nth-child(3) {
+  height: 100%;
+}
+
+.ear-meter[data-level="1"] i:nth-child(1),
+.ear-meter[data-level="2"] i:nth-child(-n + 2),
+.ear-meter[data-level="3"] i {
+  background: var(--sb-gold);
+}
+
+.ear-lost {
+  color: var(--sb-danger);
+}
+
+.ear-lat {
+  margin-left: auto;
+  padding-left: 0.4em;
+}
+
+.ear-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 0.3em;
+  min-height: 2.75em;
+}
+
+.ear-chip {
+  flex: 0 0 3.2em;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.05em;
+  padding: 0.12em 0 0.15em;
+  background: var(--sb-paper);
+  border: var(--sb-line-1) solid var(--sb-ink);
+  border-radius: var(--sb-r-s);
+}
+
+.ear-chip b {
+  font-family: var(--sb-font-display);
+  font-weight: 800;
+  font-size: 1.45em;
+  line-height: 1;
+}
+
+.ear-chip .icon {
+  width: 0.95em;
+  height: 0.95em;
+}
+
+.ear-chip.miss {
+  border-style: dashed;
+  background: var(--sb-parchment);
+}
+
+.ear-chip.miss .icon {
+  color: var(--sb-rose);
+}
+
+/* A strum with nothing to hit: plain paper and a quiet note, no blame. */
+.ear-chip.neutral .icon {
+  color: var(--sb-ink-2);
+}
+
+.ear-chip.is-newest {
+  border-width: var(--sb-line-2);
+  animation: sb-chip-in 120ms var(--sb-ease-out);
+}
+
+.ear-chip.is-newest.hit {
+  box-shadow: 0 0 0 0.14em var(--sb-gold);
+}
+
+.ear-empty {
+  align-self: center;
+  font-size: 0.85em;
+  font-style: italic;
+  color: var(--sb-ink-2);
+}
+
+/* The result line at full HUD size. The longest ("C · Happily Ever After!") fits on one line at every
+   frame size (compact frames drop the chord); if one ever didn't, it wraps rather than being cut. */
+.ear-caption {
+  font-size: 1em;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: right;
+  text-wrap: balance;
+}
+
+/* ---------- 9. title ---------- */
 .gm-bottom {
   position: absolute;
   left: 0;
@@ -573,76 +1682,207 @@ button[type="submit"] {
   pointer-events: auto;
 }
 
-/* Title / end panels sit under the heading, leaving the bard visible. */
 .gm-bottom.gm-raised {
   bottom: auto;
+}
+
+/* Menu on the left, the bard chasing the wolf into the portal on the right. */
+.gm-bottom.gm-raised.title-side {
   top: 31%;
+  bottom: 3%;
+  left: 0;
+  right: auto;
+  padding-left: 3%;
+  justify-content: flex-start;
+  align-items: flex-start;
 }
 
-.gm-bottom.gm-raised.end {
-  top: 36%;
-}
-
-.gm-modal {
-  position: absolute;
-  inset: 0;
-  background: rgba(20, 12, 8, 0.55);
+.title-side .title-panel {
+  width: 29em;
+  max-height: 100%;
+  overflow-y: auto;
+  text-align: left;
+  padding: 0.75em 1.1em 0.85em;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2%;
+  flex-direction: column;
+  gap: 0.55em;
 }
 
-.title-panel {
-  max-width: 78%;
-  text-align: center;
+.title-lede {
+  margin: 0;
+  font-style: italic;
+  color: var(--sb-ink-2);
 }
 
 .title-buttons {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55em;
+}
+
+.title-buttons .gm-btn {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 0.45em;
+  text-align: left;
+}
+
+.title-buttons .gm-btn > .icon {
+  grid-row: 1 / span 2;
+  width: 1.35em;
+  height: 1.35em;
+}
+
+.title-buttons .gm-btn > small {
+  grid-column: 2;
+}
+
+.title-buttons .primary {
+  grid-column: 1 / -1;
+  font-size: 1.35em;
+}
+
+.title-choice {
+  display: grid;
+  gap: 0.2em;
+}
+
+.title-label {
+  font-size: max(11px, 0.8em);
+  font-weight: 800;
+  color: var(--sb-ink-2);
+  letter-spacing: 0.04em;
+}
+
+.journey-map {
   display: flex;
-  gap: 0.7em;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 0.9em;
+}
+
+.jm-world {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.jm-era {
+  font-size: max(11px, 0.72em);
+  font-weight: 800;
+  color: var(--sb-ink-2);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0 0 0.35em;
+}
+
+.jm-era .icon {
+  width: 1.25em;
+  height: 1.25em;
+}
+
+.jm-levels {
+  display: flex;
+  gap: 0.35em;
+}
+
+.jm-level.gm-btn {
+  position: relative;
+  width: 2.7em;
+  height: 2.1em;
+  padding: 0;
+  font-size: 0.9em;
+  font-weight: 800;
+  border-radius: var(--sb-r-s);
+  box-shadow: var(--sb-lift-1);
+}
+
+.jm-level.boss:not(:disabled) {
+  background: var(--sb-boss-tint);
+}
+
+/* Selected: ink-inverted, the boss tint included (its rule above is more specific than [aria-pressed]). */
+.jm-level[aria-pressed="true"],
+.jm-level[aria-pressed="true"]:hover:not(:disabled),
+.jm-level.boss[aria-pressed="true"]:not(:disabled) {
+  background: var(--sb-ink);
+  color: var(--sb-paper);
+}
+
+.jm-level .icon {
+  position: absolute;
+  top: -0.55em;
+  right: -0.55em;
+  width: 1.15em;
+  height: 1.15em;
+  color: var(--sb-ink);
+}
+
+/* ---------- 10. tuner ---------- */
+/* Up under the "Tune your lute" title, so the bard and the campfire stay in view. */
+.tune-slot {
+  position: absolute;
+  top: 21%;
+  left: 0;
+  right: 0;
+  display: flex;
   justify-content: center;
-  flex-wrap: wrap;
-  align-items: center;
+  pointer-events: none;
 }
 
-.title-help {
-  margin: 0.8em 0 0;
-  line-height: 1.6;
-}
-
-.title-help a {
-  color: #8a3b1c;
-}
-
-/* tuner */
 .tune-panel {
-  display: flex;
-  gap: 1.5em;
-  align-items: center;
-  max-width: 82%;
+  pointer-events: auto;
+  max-width: 70%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18em;
+  gap: 0.6em 1.4em;
+  padding: 0.8em 1.1em;
 }
 
-.tune-main {
-  min-width: 22em;
+.tune-left {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.45em;
+  min-width: 0;
+}
+
+.tune-reading {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
 }
 
 .tune-note {
-  font-size: 3.2em;
-  font-weight: 800;
+  min-width: 1.6em;
   text-align: center;
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+  font-size: 2.6em;
+  line-height: 1;
 }
 
 .tune-note.ok {
-  color: #2f8a3a;
+  color: var(--sb-success);
+}
+
+.tune-gauge {
+  display: grid;
+  gap: 0.25em;
 }
 
 .tune-meter {
   position: relative;
-  height: 1.4em;
-  background: linear-gradient(90deg, #f3b2a5, #fff6dc 40%, #b9e8b0 50%, #fff6dc 60%, #f3b2a5);
-  border: 3px solid #2b1a12;
-  border-radius: 999px;
+  width: 16em;
+  max-width: 100%;
+  height: 1.2em;
+  background: linear-gradient(90deg, var(--sb-tune-off), var(--sb-paper) 40%, var(--sb-tune-on) 50%, var(--sb-paper) 60%, var(--sb-tune-off));
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-pill);
 }
 
 .tune-center {
@@ -651,7 +1891,8 @@ button[type="submit"] {
   top: -4px;
   bottom: -4px;
   width: 3px;
-  background: #2b1a12;
+  margin-left: -1.5px;
+  background: var(--sb-ink);
 }
 
 .tune-needle {
@@ -660,746 +1901,1531 @@ button[type="submit"] {
   width: 8px;
   height: calc(100% + 16px);
   margin-left: -4px;
-  background: #c8553d;
-  border: 2px solid #2b1a12;
+  background: var(--sb-rose);
+  border: var(--sb-line-1) solid var(--sb-ink);
   border-radius: 4px;
-  transition: left 0.08s linear;
+  transition: left 80ms linear;
+}
+
+/* Nothing heard yet: an empty (dashed) needle rather than a faded one. */
+.tune-needle[data-idle] {
+  background: var(--sb-parchment);
+  border-style: dashed;
+}
+
+.tune-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: max(11px, 0.8em);
+  font-weight: 700;
+  color: var(--sb-ink-2);
 }
 
 .tune-hint {
-  text-align: center;
-  margin: 0.5em 0;
+  margin: 0;
   font-weight: 700;
+  text-align: center;
 }
 
 .tune-strings {
   display: flex;
+  align-items: center;
   gap: 0.4em;
-  justify-content: center;
-  margin-bottom: 0.5em;
+}
+
+.tune-cap {
+  font-size: max(11px, 0.75em);
+  font-weight: 700;
+  color: var(--sb-ink-2);
 }
 
 .tune-string {
-  width: 2.3em;
-  height: 2.3em;
-  border: 3px solid #2b1a12;
+  position: relative;
+  width: 2.1em;
+  height: 2.1em;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+  background: var(--sb-paper);
+  border: var(--sb-line-2) solid var(--sb-ink);
   border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  background: #fff6dc;
-}
-
-.tune-string small {
-  font-size: 0.6em;
 }
 
 .tune-string.active {
-  background: #ffcf5c;
+  box-shadow: 0 0 0 0.18em var(--sb-gold);
 }
 
 .tune-string.done {
-  background: #8fe36a;
+  background: var(--sb-ink);
+  color: var(--sb-paper);
 }
 
-.tune-side {
-  max-width: 16em;
-}
-
-.game-ui .meter {
-  background: #e3cfa3;
-}
-
-/* HUD */
-.hud-tl {
+/* Tuned: a gold check sticker on the coin. */
+.tune-string .icon {
   position: absolute;
-  top: 2%;
-  left: 1.5%;
-  width: 28%;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35em;
-}
-
-.gm-bar {
-  position: relative;
-  height: 1.5em;
-  background: #5a2e22;
-  border: 3px solid #2b1a12;
-  border-radius: 999px;
-  overflow: hidden;
-  box-shadow: 0 2px 0 #2b1a12;
-}
-
-.gm-bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: linear-gradient(#ff8a7a, #d9433a);
-  transition: width 0.15s;
-}
-
-.gm-bar.magic {
-  background: #3b3060;
-  height: 1.2em;
-}
-
-.gm-bar.magic .gm-bar-fill {
-  background: linear-gradient(#ffe48a, #e8a92a);
-}
-
-.gm-bar.magic.full {
-  animation: glow 0.6s infinite alternate;
-}
-
-@keyframes glow {
-  from {
-    box-shadow: 0 0 4px #ffe066, 0 2px 0 #2b1a12;
-  }
-  to {
-    box-shadow: 0 0 18px #ffe066, 0 2px 0 #2b1a12;
-  }
-}
-
-.gm-bar.boss .gm-bar-fill {
-  background: linear-gradient(#a58bd6, #5b3b8c);
-}
-
-.gm-bar-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  padding-left: 0.7em;
-  font-weight: 800;
-  font-size: 0.85em;
-  color: #fff;
-  text-shadow: 0 0 3px #2b1a12, 0 1px 0 #2b1a12;
-}
-
-.hud-objective,
-.hud-shield {
-  align-self: flex-start;
-  background: rgba(246, 231, 193, 0.92);
-  border: 2px solid #2b1a12;
-  border-radius: 10px;
-  padding: 0.15em 0.6em;
-  font-weight: 700;
-  font-size: 0.9em;
-}
-
-.hud-shield {
-  background: #d9f6ff;
-}
-
-.hud-top {
-  position: absolute;
-  top: 2%;
-  left: 34%;
-  width: 32%;
-  text-align: center;
-}
-
-.hud-top.small {
-  left: 38%;
-  width: 24%;
-}
-
-.hud-boss-name {
-  font-weight: 800;
-  font-size: 1.15em;
-  color: #fff6dc;
-  text-shadow: 0 2px 0 #2b1a12, 0 0 4px #2b1a12;
-  margin-bottom: 0.15em;
-}
-
-.hud-tr {
-  position: absolute;
-  top: 2%;
-  right: 1.5%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.4em;
-}
-
-.hud-beat {
-  width: 1.2em;
-  height: 1.2em;
+  top: -0.5em;
+  right: -0.55em;
+  width: 1.15em;
+  height: 1.15em;
+  padding: 0.12em;
+  color: var(--sb-ink);
+  background: var(--sb-gold);
+  border: var(--sb-line-1) solid var(--sb-ink);
   border-radius: 50%;
-  background: #ffe066;
-  border: 3px solid #2b1a12;
-  animation: beat 0.45s ease-out;
 }
 
-@keyframes beat {
-  from {
-    transform: scale(1.7);
-    background: #fff;
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-.hud-combo {
-  font-size: 2.6em;
-  font-weight: 900;
-  color: #ffe066;
-  text-shadow: 0 3px 0 #2b1a12, 0 0 6px #2b1a12;
-  animation: pop 0.2s ease-out;
-  line-height: 1;
-}
-
-.hud-combo span {
-  font-size: 0.4em;
-  margin-left: 0.2em;
-  color: #fff6dc;
-}
-
-@keyframes pop {
-  from {
-    transform: scale(1.4);
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-.hud-ear {
-  position: absolute;
-  left: 1.5%;
-  bottom: 2.5%;
-  max-width: 62%;
-  background: rgba(246, 231, 193, 0.92);
-  border: 3px solid #2b1a12;
-  border-radius: 14px;
-  padding: 0.35em 0.6em 0.45em;
-}
-
-.ear-title {
-  font-size: 0.75em;
-  font-weight: 700;
-  opacity: 0.7;
-}
-
-.ear-row {
+.sb-level {
   display: flex;
-  gap: 0.35em;
-  align-items: stretch;
-}
-
-.ear-empty {
-  opacity: 0.6;
-  font-style: italic;
-}
-
-.ear-chip {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  min-width: 3.6em;
-  padding: 0.15em 0.35em;
-  border: 2px solid #2b1a12;
-  border-radius: 10px;
-  background: #fff6dc;
-  opacity: 0.7;
-}
-
-.ear-chip.newest {
-  opacity: 1;
-  transform: scale(1.06);
-}
-
-.ear-chip b {
-  font-size: 1.35em;
-  line-height: 1.1;
-}
-
-.ear-chip small {
-  font-size: 0.65em;
-}
-
-.ear-chip em {
-  font-size: 0.62em;
-  font-style: normal;
+  gap: 0.45em;
+  width: 100%;
+  max-width: 20em;
+  font-size: max(11px, 0.8em);
   font-weight: 700;
+  color: var(--sb-ink-2);
+}
+
+.sb-level-bar {
+  flex: 1;
+  height: 0.65em;
+  background: var(--sb-paper);
+  border: var(--sb-line-1) solid var(--sb-ink);
+  border-radius: var(--sb-r-pill);
+  overflow: hidden;
+}
+
+.sb-level-fill {
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(var(--sb-path-hi), var(--sb-path-lo));
+}
+
+.sb-level b {
+  font-weight: 800;
+  white-space: nowrap;
+  color: var(--sb-success);
+}
+
+.tune-right {
+  display: grid;
+  align-content: center;
+  gap: 0.5em;
+}
+
+.tune-right .sound-choice .seg > button {
   white-space: nowrap;
 }
 
-.ear-chip.perfect {
-  background: #ffe48a;
-  border-color: #b8860b;
+.tune-go {
+  display: grid;
+  justify-items: start;
+  text-align: left;
 }
 
-.ear-chip.special {
-  box-shadow: 0 0 0 2px #c8553d;
-}
-
-.ear-combo {
-  margin-top: 0.3em;
-  font-size: 0.85em;
-}
-
-.ear-combo b {
-  color: #c8553d;
-}
-
-.hud-br {
-  position: absolute;
-  right: 1.5%;
-  bottom: 2.5%;
-  background: rgba(246, 231, 193, 0.85);
-  border: 2px solid #2b1a12;
-  border-radius: 10px;
-  padding: 0.2em 0.6em;
-  font-size: 0.8em;
-}
-
-.dev-overlay {
-  position: absolute;
-  top: 16%;
-  right: 1.5%;
-  background: rgba(10, 12, 18, 0.85);
-  color: #d6f5d6;
-  font-family: ui-monospace, monospace;
-  font-size: 0.75em;
-  padding: 0.5em 0.7em;
-  border-radius: 8px;
-  line-height: 1.5;
-}
-
-.dev-overlay .muted {
-  color: #8a93a6;
-}
-
-.gm-toast {
-  position: absolute;
-  top: 12%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #fff6dc;
-  border: 3px solid #2b1a12;
-  border-radius: 12px;
-  padding: 0.4em 0.9em;
+.tune-progress {
+  margin: 0;
+  font-size: max(11px, 0.8em);
   font-weight: 700;
+  color: var(--sb-ink-2);
 }
 
-/* pause, picker, end */
+/* ---------- 11. picker / pause / book / end ---------- */
+/* pause: what to do first, settings grouped, leaving asks once. */
 .pause {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6em;
-  min-width: 22em;
-  align-items: stretch;
+  width: 24em;
+  max-width: 100%;
+  display: grid;
+  gap: 0.7em;
+  text-align: left;
+}
+
+.pause h2 {
+  margin: 0;
   text-align: center;
 }
 
-.picker {
-  max-width: 70%;
+/* Short frames (phones in landscape): while the page scrolls, its bottom edge fades out to say there
+   is more below. Driven by the page's own scroll: nothing when it fits, gone at the end. The fade is
+   the page's last grid row (0 high), so the row gap before it stands in for most of the bottom padding. */
+.gm-panel.pause {
+  padding-bottom: 0.3em;
 }
 
-.picker-list {
+.gm-panel.pause::after {
+  content: "";
+  position: sticky;
+  bottom: 0;
+  height: 2.4em;
+  margin: -2.4em -1.2em 0;
+  background: linear-gradient(transparent, var(--sb-parchment) 85%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+@supports (animation-timeline: scroll()) {
+  .gm-panel.pause::after {
+    animation: sb-more-below linear both;
+    animation-timeline: scroll(nearest block);
+  }
+}
+
+.pause-main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55em;
+}
+
+.pause-book {
+  white-space: nowrap;
+}
+
+.pause-main .gm-btn {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  padding-left: 0.6em;
+  padding-right: 0.6em;
+}
+
+.pause-keys {
+  margin: -0.3em 0 0;
+  font-size: max(11px, 0.8em);
+  font-weight: 600;
+  color: var(--sb-ink-2);
+}
+
+.pause-alert {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.35em 0.55em;
+  padding: 0.5em 0.65em;
+  background: var(--sb-paper);
+  border: var(--sb-line-2) solid var(--sb-rose);
+  border-radius: var(--sb-r-m);
+}
+
+.pause-alert.is-back {
+  border-color: var(--sb-success);
+}
+
+.pause-alert .icon {
+  width: 1.6em;
+  height: 1.6em;
+}
+
+.pause-alert p {
+  margin: 0;
+}
+
+.pause-alert .gm-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.pause-group {
+  display: grid;
+  gap: 0.6em;
+  padding-top: 0.6em;
+  border-top: var(--sb-line-1) dashed var(--sb-ink-2);
+}
+
+.pause-h {
+  margin: 0;
+  font-size: max(11px, 0.8em);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--sb-ink-2);
+}
+
+.pause-group .sb-switch .icon {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.sb-switch small.is-error {
+  color: var(--sb-danger);
+}
+
+.sound-choice {
+  display: grid;
+  gap: 0.3em;
+}
+
+.sound-label {
+  font-weight: 700;
+}
+
+.sound-choice .seg > button {
+  flex-direction: row;
+  gap: 0.35em;
+  padding: 0.35em 0.5em;
+}
+
+/* Which microphone: a paper select, like the segmented controls */
+.mic-choice {
+  display: grid;
+  gap: 0.3em;
+  min-width: 0;
+}
+
+.mic-choice select {
+  font: inherit;
+  font-weight: 700;
+  color: var(--sb-ink);
+  background: var(--sb-paper);
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-m);
+  box-shadow: var(--sb-lift-2);
+  padding: 0.35em 0.5em;
+  width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.mic-choice select:disabled {
+  opacity: 0.6;
+}
+
+/* Room check under the tuner's mic level */
+.room-check {
+  margin: 0;
+  max-width: 22em;
+  font-size: max(11px, 0.8em);
+  font-weight: 700;
+  color: var(--sb-ink-2);
+}
+
+.room-check[data-tone="ok"] {
+  color: var(--sb-success);
+}
+
+.room-check[data-tone="bad"] {
+  color: var(--sb-danger);
+}
+
+.sound-choice small {
+  font-size: max(11px, 0.8em);
+  font-weight: 600;
+  color: var(--sb-ink-2);
+}
+
+.pause-leave {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
   gap: 0.5em;
-  max-height: 48cqw;
-  overflow: auto;
+  padding-top: 0.6em;
+  border-top: var(--sb-line-1) dashed var(--sb-ink-2);
+}
+
+.pause-leave .gm-btn {
+  flex: 1 1 auto;
+}
+
+.pause-confirm {
+  flex-basis: 100%;
+  margin: 0;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* song picker: docked left so the boss stays in view behind a lighter scrim */
+.gm-modal.picker-modal {
+  justify-content: flex-start;
+  padding: 2% 3%;
+  background: var(--sb-scrim-light);
+}
+
+.gm-panel.picker {
+  width: 52%;
+  display: grid;
+  align-content: start;
+  gap: 0.6em;
+}
+
+.picker h2 {
+  margin: 0;
+}
+
+.picker-intro {
+  margin: 0;
+  line-height: 1.35;
 }
 
 .picker-item {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.5em;
   text-align: left;
-  display: flex;
-  flex-direction: column;
 }
 
-.picker-item small {
-  font-weight: 400;
-  opacity: 0.75;
+.picker-item > .icon {
+  grid-row: 1 / span 2;
+}
+
+.picker-item > small {
+  grid-column: 2;
+}
+
+.pi-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-featured {
+  font-size: 1.15em;
+}
+
+.picker-h {
+  margin: 0.2em 0 0;
+  font-size: 1em;
+  font-weight: 800;
+}
+
+.picker-h small {
+  font-size: max(11px, 0.8em);
+  font-weight: 600;
+  color: var(--sb-ink-2);
+}
+
+.picker-list {
+  display: grid;
+  gap: 0.4em;
+  max-height: 22em;
+  overflow-y: auto;
+  padding: 0.2em 0.2em 1.5em;
+  mask-image: linear-gradient(black 85%, transparent);
+}
+
+.picker-list .picker-item {
+  border-width: var(--sb-line-1);
+  box-shadow: none;
+}
+
+.picker-list .picker-item:hover:not(:disabled),
+.picker-list .picker-item:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.picker-list :focus-visible {
+  outline-offset: -4px;
+}
+
+.picker-more summary {
+  cursor: pointer;
+  padding: 0.2em 0.4em;
+  font-size: max(11px, 0.8em);
+  font-weight: 700;
+  color: var(--sb-ink-2);
+}
+
+.picker-more .picker-item {
+  margin-top: 0.3em;
+}
+
+.picker-note {
+  margin: 0;
 }
 
 .picker-loading {
+  margin: 0;
   font-size: 1.3em;
   font-weight: 700;
 }
 
-.end-panel {
-  text-align: center;
-}
-
-.end-stats {
+.picker-foot {
   display: flex;
-  gap: 1.2em;
-  justify-content: center;
-  margin-bottom: 0.7em;
-  flex-wrap: wrap;
 }
 
-.end-stats span {
-  display: flex;
-  flex-direction: column;
-  font-size: 0.85em;
+.picker-back small {
+  display: inline;
+  margin-left: 0.4em;
 }
 
-.end-stats b {
-  font-size: 1.6em;
-}
-
-/* spellbook */
-.spellbook {
+/* Chord Book: a page of songbook chord boxes */
+.gm-modal > .gm-panel.cb {
   width: 94%;
-  max-height: 94%;
-  overflow: auto;
 }
 
-.sb-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.sb-intro {
-  margin: 0 0 0.5em;
-  line-height: 1.5;
-}
-
-.sb-practice {
-  display: block;
-  font-weight: 700;
-  margin: 0.4em 0 0.8em;
-}
-
-.sb-grid {
+.cb {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(26em, 1fr));
-  gap: 0.8em;
-}
-
-.sb-move {
-  background: #fff6dc;
-  border: 3px solid #2b1a12;
-  border-radius: 12px;
-  padding: 0.6em 0.8em;
-}
-
-.sb-move.super {
-  background: #fff1b8;
-}
-
-.sb-move h3 {
-  margin: 0 0 0.3em;
-}
-
-.sb-move p {
-  margin: 0.4em 0;
-  font-size: 0.92em;
-}
-
-.sb-inputs {
-  display: flex;
-  gap: 0.35em;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.sb-pill {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  font-weight: 800;
-  font-size: 1.15em;
-  background: #ffcf5c;
-  border: 2px solid #2b1a12;
-  border-radius: 10px;
-  padding: 0.05em 0.55em;
-}
-
-.sb-pill.chord {
-  background: #c6f3ff;
-}
-
-.sb-pill small {
-  font-size: 0.55em;
-  font-weight: 600;
-}
-
-.sb-req {
-  font-size: 0.8em;
-  font-weight: 700;
-  color: #8a3b1c;
-}
-
-.sb-frets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3em;
-}
-
-.sb-frets figure {
-  margin: 0;
-  text-align: center;
-  font-weight: 700;
-  font-size: 0.8em;
-}
-
-.fretboard {
-  display: block;
-}
-
-/* input test page also uses .meter / .meter-fill (see above) */
-
-/* ---------- chord-to-slay redesign ---------- */
-.mode-toggle {
-  display: inline-flex;
-  gap: 0;
-  margin-bottom: 0.7em;
-  border: 3px solid #2b1a12;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 3px 0 #2b1a12;
-}
-
-.mode-btn {
-  font-family: inherit;
-  font-weight: 800;
-  font-size: 1em;
-  color: #2b1a12;
-  background: #fff6dc;
-  border: none;
-  padding: 0.35em 1.1em;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1.15;
-}
-
-.mode-btn + .mode-btn {
-  border-left: 3px solid #2b1a12;
-}
-
-.mode-btn small {
-  font-weight: 600;
-  font-size: 0.7em;
-  opacity: 0.75;
-}
-
-.mode-btn.on {
-  background: #ffcf5c;
+  gap: 0.6em;
 }
 
 .cb-head {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.6em;
-  margin-bottom: 0.3em;
+  gap: 1em;
 }
 
-.cb-head h3 {
+.cb-head h2 {
   margin: 0;
 }
 
-.cb-section {
-  margin: 0.9em 0 0.4em;
+.cb-intro {
+  margin: 0;
+  max-width: 62em;
+  line-height: 1.45;
 }
 
-.sb-move.heal {
-  background: #ffe9f5;
-}
-
-.sb-move.super {
-  background: #fff1b8;
-}
-
-.hud-path {
-  position: relative;
-  height: 1.1em;
-  margin-top: 0.4em;
-  background: #e3cfa3;
-  border: 3px solid #2b1a12;
-  border-radius: 999px;
-}
-
-.hud-path-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: linear-gradient(#a8e08a, #5fa548);
-  border-radius: 999px;
-  transition: width 0.3s;
-}
-
-.hud-path-bard {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.3em;
-  transition: left 0.3s;
-}
-
-.hud-path-goal {
-  position: absolute;
-  right: -0.4em;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 1.3em;
-}
-
-.ear-chip.miss {
-  opacity: 0.55;
-  border-style: dashed;
-}
-
-/* chord helper: shapes of the chords needed right now */
-.chord-helper {
-  position: absolute;
-  left: 50%;
-  bottom: 2.5%;
-  transform: translateX(-38%);
+.cb-legend {
+  margin: 0;
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em 1.2em;
+  font-size: max(11px, 0.85em);
+  font-weight: 600;
+  color: var(--sb-ink-2);
+}
+
+.cb-practice {
+  justify-self: start;
+}
+
+.cb-section {
+  margin: 0.3em 0 0;
+  font-family: var(--sb-font-display);
+  font-weight: 800;
+  font-size: 1.1em;
+}
+
+.cb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15em, 1fr));
+  gap: 0.8em;
+}
+
+.cb-card {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 0.4em;
+  padding: 0.6em 0.8em 0.7em;
+  background: var(--sb-paper);
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-m);
+  box-shadow: var(--sb-lift-1);
+}
+
+.cb-card.heal {
+  background: var(--sb-heal);
+}
+
+.cb-card.super {
+  background: var(--sb-gold-soft);
+}
+
+.cb-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
   gap: 0.5em;
+}
+
+.cb-card-head h4 {
+  margin: 0;
+  font-size: 1em;
+}
+
+.cb-pill {
+  padding: 0.05em 0.45em;
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+  font-size: 1.6em;
+  line-height: 1.1;
+  background: var(--sb-gold);
+  border: var(--sb-line-1) solid var(--sb-ink);
+  border-radius: var(--sb-r-s);
+}
+
+.cb-card p {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--sb-ink-2);
+  text-align: center;
+}
+
+/* end: stats and the way on, under the canvas title and over the bard (33% to ~52% of the frame) */
+.gm-bottom.gm-raised.end {
+  top: 33%;
+}
+
+.end-panel {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 0.45em 1.4em;
+  padding: 0.65em 1.1em;
+  animation: sb-rise 300ms var(--sb-ease-out) 120ms both;
+}
+
+.end-stats,
+.end-line,
+.end-panel .sb-switch {
+  grid-column: 1;
+}
+
+.end-stats {
+  display: flex;
+  gap: 1.3em;
+}
+
+.end-stats > div {
+  display: grid;
+  justify-items: center;
+}
+
+.end-stats b {
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+  font-size: 1.6em;
+  line-height: 1;
+}
+
+/* "15 of 16": the count reads first. */
+.end-stats b small {
+  font-size: 0.55em;
+  font-weight: 800;
+}
+
+.end-stats span {
+  font-size: max(11px, 0.8em);
+  font-weight: 700;
+  color: var(--sb-ink-2);
+}
+
+.end-line {
+  margin: 0;
+  font-weight: 700;
+}
+
+.end-buttons {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: grid;
+  gap: 0.45em;
+}
+
+.end-panel--defeat .end-buttons {
+  grid-row: 1 / span 3;
+}
+
+.end-next {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  align-items: center;
+  column-gap: 0.45em;
+  text-align: left;
+}
+
+.end-next > .icon {
+  grid-row: 1 / span 2;
+  width: 1.5em;
+  height: 1.5em;
+}
+
+.end-next > small {
+  grid-column: 2;
+}
+
+.end-title {
+  font-size: 0.9em;
+}
+
+/* the lute's advice: a card at the bottom-left of the End screen (End.ts stands the bard right of centre) */
+.lute-slot {
+  position: absolute;
+  left: 3%;
+  bottom: 3.5%;
+  width: 46%;
+  max-height: 42%;
+  display: flex;
   align-items: flex-end;
   pointer-events: none;
 }
 
-.ch-card {
-  background: rgba(246, 231, 193, 0.95);
-  border: 3px solid #2b1a12;
-  border-radius: 12px;
-  padding: 0.2em 0.45em 0.3em;
-  box-shadow: 0 3px 0 #2b1a12;
-  opacity: 0.85;
+.lute-card {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.7em;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 0.6em 0.9em 0.65em;
+  animation: sb-rise 300ms var(--sb-ease-out) 260ms both;
 }
 
-.ch-card.first {
-  opacity: 1;
-  border-color: #b8860b;
-  box-shadow: 0 0 0 3px #ffd25e, 0 3px 0 #2b1a12;
+.lute-icon {
+  align-self: start;
+  margin-top: 0.1em;
 }
 
-.ch-card.heal {
-  background: #ffe9f5;
+.lute-card[aria-busy="true"] .lute-icon {
+  animation: sb-lute-think 0.9s ease-in-out infinite alternate;
 }
 
-.ch-card.super {
-  background: #fff1b8;
+.lute-body {
+  min-width: 0;
 }
 
-.ch-name {
+.lute-kicker {
+  margin: 0;
+  font-size: max(11px, 0.72em);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sb-ink-2);
+}
+
+.lute-card h3 {
+  margin: 0.05em 0 0.25em;
+  font-family: var(--sb-font-display);
+  font-weight: 800;
+  font-size: 1.25em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.lute-tip,
+.lute-wait {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.lute-wait {
+  color: var(--sb-ink-2);
+  font-style: italic;
+}
+
+.lute-foot {
+  grid-column: 2;
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em 0.8em;
+  margin-top: 0.4em;
+}
+
+.lute-drill {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  font-weight: 800;
+}
+
+.lute-label {
+  font-size: max(11px, 0.75em);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sb-ink-2);
+}
+
+.lute-chip {
+  padding: 0.02em 0.4em;
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+  background: var(--sb-gold);
+  border: var(--sb-line-1) solid var(--sb-ink);
+  border-radius: var(--sb-r-s);
+}
+
+.lute-more {
+  display: inline-flex;
+  align-items: center;
   gap: 0.4em;
+  margin-left: auto;
+  padding: 0.3em 0.8em;
+  font-size: 0.9em;
+}
+
+.lute-src {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: max(11px, 0.72em);
+  color: var(--sb-ink-2);
+}
+
+@keyframes sb-lute-think {
+  from {
+    transform: rotate(-7deg);
+  }
+  to {
+    transform: rotate(7deg);
+  }
+}
+
+/* The Lute's Notebook: every tip, the drill's chord boxes, and progress from Tiger Data */
+.gm-modal > .gm-panel.ln {
+  width: 92%;
+  max-width: 66em;
+}
+
+.ln {
+  display: grid;
+  gap: 0.7em;
+}
+
+.ln-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1em;
+}
+
+.ln-head h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.ln-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.3em;
+  align-items: start;
+}
+
+.ln h3 {
+  margin: 0 0 0.3em;
+  font-family: var(--sb-font-display);
+  font-weight: 800;
+  font-size: 1.2em;
+  line-height: 1.15;
+}
+
+.ln-praise {
+  margin: 0 0 0.5em;
+  font-weight: 700;
+}
+
+.ln-tips {
+  margin: 0 0 0.7em;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 0.45em;
+  line-height: 1.4;
+}
+
+.ln-tips b {
+  display: block;
+}
+
+.ln-drill {
+  padding: 0.5em 0.75em 0.6em;
+  background: var(--sb-paper);
+  border: var(--sb-line-2) solid var(--sb-ink);
+  border-radius: var(--sb-r-m);
+  box-shadow: var(--sb-lift-1);
+}
+
+.ln-drill h4 {
+  margin: 0 0 0.4em;
+}
+
+.ln-boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1em;
+}
+
+.ln-box {
+  display: grid;
+  justify-items: center;
+  gap: 0.3em;
+}
+
+.ln-box .fb-book {
+  width: 7em;
+}
+
+.ln-drill p {
+  margin: 0.45em 0 0;
+  color: var(--sb-ink-2);
+}
+
+.ln-goal {
+  margin: 0.7em 0 0;
+}
+
+.ln-progress {
+  display: grid;
+  gap: 0.75em;
+}
+
+.ln-kpis {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5em;
+}
+
+.ln-kpis > div {
+  padding: 0.3em 0.55em 0.35em;
+  background: var(--sb-paper);
+  border: var(--sb-line-1) solid var(--sb-ink);
+  border-radius: var(--sb-r-s);
+}
+
+.ln-kpis dt {
+  font-size: max(11px, 0.72em);
+  font-weight: 700;
+  color: var(--sb-ink-2);
+}
+
+.ln-kpis dd {
+  margin: 0;
+  font-family: var(--sb-font-display);
   font-weight: 900;
   font-size: 1.35em;
   line-height: 1.1;
 }
 
-.ch-name em {
-  font-size: 0.55em;
-  font-style: normal;
-  color: #8a3b1c;
-}
-
-.ch-name small {
-  font-size: 0.5em;
-  font-weight: 700;
-  opacity: 0.75;
-}
-
-.hud-ear {
-  max-width: 34%;
-}
-
-/* ---------- The Traveling Bard: journey map on the title ---------- */
-.journey-map {
-  display: flex;
-  gap: 0.6em;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin: 0 0 0.7em;
-}
-
-.jm-world {
-  background: rgba(255, 246, 220, 0.6);
-  border: 3px solid #2b1a12;
-  border-radius: 12px;
-  padding: 0.3em 0.5em 0.45em;
-}
-
-.jm-era {
-  font-weight: 800;
-  font-size: 0.78em;
-  margin-bottom: 0.25em;
-  white-space: nowrap;
-}
-
-.jm-levels {
-  display: flex;
-  gap: 0.3em;
-  justify-content: center;
-}
-
-.jm-level {
-  font-family: inherit;
-  font-weight: 800;
-  font-size: 0.85em;
-  color: #2b1a12;
-  background: #fff6dc;
-  border: 3px solid #2b1a12;
-  border-radius: 10px;
-  padding: 0.15em 0.55em;
-  cursor: pointer;
-  box-shadow: 0 2px 0 #2b1a12;
-}
-
-.jm-level.boss {
-  background: #f3d6c2;
-}
-
-.jm-level.on {
-  background: #ffcf5c;
-  transform: translateY(-1px);
-}
-
-.jm-level:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-  box-shadow: none;
-}
-
-.jm-pick {
-  margin: 0.5em 0 0;
-}
-
-.title-row {
-  display: flex;
-  gap: 0.8em;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 0.7em;
-}
-
-.title-row .mode-toggle,
-.title-row .journey-map {
+.ln-chart,
+.ln-chords {
   margin: 0;
 }
 
-.ch-card.howl {
-  background: #e9f1ff;
+.ln-chart figcaption,
+.ln-chords figcaption {
+  margin-bottom: 0.25em;
+  font-size: 0.9em;
+  font-weight: 800;
 }
 
-/* Title: menu on the left, the bard chasing the wolf into the portal on the right. */
-.gm-bottom.gm-raised.title-side {
-  justify-content: flex-start;
-  padding-left: 2.5%;
-  top: 29%;
+.ln-plot {
+  position: relative;
 }
 
-.title-side .title-panel {
-  max-width: 52%;
+.ln-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
 }
 
-.title-side .title-row {
-  flex-direction: column;
-  gap: 0.5em;
+.ln-grid,
+.ln-rail {
+  stroke: var(--sb-chart-grid);
+  stroke-width: 1;
+}
+
+.ln-tick {
+  fill: var(--sb-ink-2);
+  font-family: var(--sb-font-ui);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.ln-line {
+  fill: none;
+  stroke: var(--sb-chart-now);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.ln-dot,
+.ln-now,
+.ln-before {
+  stroke: var(--sb-parchment);
+  stroke-width: 2;
+}
+
+.ln-dot,
+.ln-now {
+  fill: var(--sb-chart-now);
+}
+
+.ln-before {
+  fill: var(--sb-chart-before);
+}
+
+.ln-dot.on {
+  r: 5.5px;
+}
+
+.ln-end {
+  fill: var(--sb-ink);
+  font-family: var(--sb-font-ui);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.ln-cross {
+  stroke: var(--sb-ink-2);
+  stroke-width: 1;
+}
+
+.ln-hit {
+  fill: transparent;
+  outline: none;
+}
+
+.ln-hit:focus-visible {
+  fill: rgb(138 59 28 / 0.1);
+}
+
+.ln-tooltip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  display: grid;
+  padding: 0.2em 0.55em;
+  white-space: nowrap;
+  font-size: 0.85em;
+  background: var(--sb-paper);
+  border: var(--sb-line-1) solid var(--sb-ink);
+  border-radius: var(--sb-r-s);
+  box-shadow: var(--sb-lift-1);
+  pointer-events: none;
+}
+
+.ln-tooltip b {
+  font-size: 1.15em;
+}
+
+.ln-tooltip span {
+  color: var(--sb-ink-2);
+}
+
+.ln-legend {
+  list-style: none;
+  margin: 0 0 0.3em;
+  padding: 0;
+  display: flex;
+  gap: 1em;
+  font-size: max(11px, 0.8em);
+  font-weight: 700;
+  color: var(--sb-ink-2);
+}
+
+.ln-legend i {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.3em;
+  border-radius: 50%;
+  vertical-align: -0.05em;
+}
+
+.ln-legend .k-before {
+  background: var(--sb-chart-before);
+}
+
+.ln-legend .k-now {
+  background: var(--sb-chart-now);
+}
+
+.ln-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ln-table th {
+  width: 2.8em;
+  padding: 0.12em 0;
+  text-align: left;
+  font-family: var(--sb-font-display);
+  font-weight: 900;
+}
+
+.ln-table td {
+  padding: 0.12em 0;
+}
+
+.ln-table td.ln-track {
+  padding: 0 0.7em;
+}
+
+.ln-track svg {
+  display: block;
+  overflow: visible;
+}
+
+.ln-link {
+  stroke: var(--sb-chart-before);
+  stroke-width: 2;
+}
+
+.ln-vals {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.ln-table tr:hover > * {
+  background: rgb(255 255 255 / 0.35);
+}
+
+.ln-community,
+.ln-empty {
+  margin: 0;
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.ln-src {
+  margin: 0;
+  font-size: max(11px, 0.78em);
+  color: var(--sb-ink-2);
+}
+
+/* ---------- 12. toast / dev / rotate ---------- */
+/* Boot on a first visit: a plate in the middle of the empty frame while the art downloads. */
+.boot-slot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.boot-plate {
+  display: grid;
+  justify-items: center;
+  gap: 0.55em;
+  padding: 0.7em 1.3em 0.85em;
+  font-family: var(--sb-font-display);
+  font-weight: 800;
+  font-size: 1.3em;
+  line-height: 1.15;
+  /* It waits a moment before fading in, so a plate that comes and goes at once is never seen. */
+  animation: sb-fade-in 250ms var(--sb-ease-out) 150ms both;
+}
+
+.boot-bar {
+  width: 11em;
+}
+
+.boot-bar .gm-bar-fill {
+  background: linear-gradient(var(--sb-path-hi), var(--sb-path-lo));
+}
+
+.gm-toast {
+  position: absolute;
+  top: 24%;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 60%;
+  padding: 0.4em 0.9em;
+  background: var(--sb-paper);
+  font-weight: 700;
+  text-align: center;
+  z-index: var(--z-toast);
+  pointer-events: none;
+}
+
+/* Empty: invisible, but still a live region in the accessibility tree (display: none would drop it,
+   and the next toast would go unread). */
+.gm-toast:empty {
+  opacity: 0;
+}
+
+/* Dev overlay (backquote): keeps its dark monospace look, above the Ear
+   (9em of its own 0.75em type = the Ear's ~6.7em of HUD type, plus a gap). */
+.dev-overlay {
+  position: absolute;
+  right: 1.5%;
+  bottom: calc(2.5% + 9em);
+  z-index: var(--z-dev);
+  padding: 0.5em 0.7em;
+  background: var(--sb-dev-bg);
+  color: var(--sb-dev-ink);
+  font-family: ui-monospace, monospace;
+  font-size: 0.75em;
+  line-height: 1.5;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.dev-overlay .dev-dim {
+  color: var(--sb-dev-dim);
+}
+.rotate-card {
+  display: none;
+}
+
+/* Advice, not a wall: the card sits above the (centred) game and taps still reach it. */
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-card:not([hidden]) {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px;
+    background: var(--sb-scrim);
+    pointer-events: none;
+  }
+}
+
+.rotate-card .gm-panel {
+  pointer-events: auto;
+  max-width: 22em;
+  display: grid;
+  gap: 0.8em;
+  justify-items: center;
+  text-align: center;
+}
+
+.rotate-card .gm-panel h2 {
+  margin: 0;
+}
+
+.rotate-card p {
+  margin: 0;
+}
+
+/* ---------- 13. states and motion ---------- */
+@keyframes sb-glow {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sb-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.3em);
+  }
+}
+
+@keyframes sb-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Hidden for the animation's length, then shown at once (reduced motion's stand-in for a delayed fade). */
+@keyframes sb-wait {
+  from,
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sb-pop {
+  from {
+    transform: scale(1.25);
+  }
+}
+
+@keyframes sb-milestone {
+  from,
+  to {
+    background-color: var(--sb-gold);
+  }
+}
+
+@keyframes sb-milestone-ring {
+  from,
+  to {
+    outline: 3px solid var(--sb-gold-deep);
+  }
+}
+
+@keyframes sb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@keyframes sb-chip-in {
+  from {
+    transform: translateX(0.6em) rotate(2deg);
+  }
+}
+
+/* Scroll-driven (the pause page's "more below" fade): full at the top, none at the end. */
+@keyframes sb-more-below {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Two identical beat animations: alternating the name restarts the ring on every beat. */
+@keyframes sb-beat-a {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sb-gold) 95%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 0.7em color-mix(in srgb, var(--sb-gold) 0%, transparent);
+  }
+}
+
+@keyframes sb-beat-b {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sb-gold) 95%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 0.7em color-mix(in srgb, var(--sb-gold) 0%, transparent);
+  }
+}
+
+@keyframes sb-blink-a {
+  0% {
+    outline: 3px solid var(--sb-gold-deep);
+  }
+  100% {
+    outline: 3px solid transparent;
+  }
+}
+
+@keyframes sb-blink-b {
+  0% {
+    outline: 3px solid var(--sb-gold-deep);
+  }
+  100% {
+    outline: 3px solid transparent;
+  }
+}
+
+/* Reduced motion: every cue survives as a blink or a colour, nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .gm-btn,
+  .hud-pause,
+  .seg > button,
+  .gm-bar-fill,
+  .hud-path-fill,
+  .hud-path-bard,
+  .tune-needle {
+    transition: none;
+  }
+
+  .gm-btn:hover:not(:disabled),
+  .gm-btn:active:not(:disabled),
+  .hud-pause:hover,
+  .hud-pause:active {
+    transform: none;
+  }
+
+  .hud-stat.magic.full::after {
+    animation: none;
+    opacity: 1;
+    box-shadow: 0 0 0 0.15em var(--sb-gold);
+  }
+
+  .hud-banner,
+  .hud-combo,
+  .ear-chip.is-newest,
+  .end-panel,
+  .lute-card,
+  .lute-card[aria-busy="true"] .lute-icon {
+    animation: none;
+  }
+
+  /* No fade: the plate just appears, after the same short wait. */
+  .boot-plate {
+    animation: sb-wait 150ms;
+  }
+
+  .hud-combo.milestone {
+    animation: sb-milestone-ring 600ms steps(1);
+  }
+
+  .ch-card.now[data-beat="a"]::after {
+    animation: sb-blink-a 300ms steps(1);
+  }
+
+  .ch-card.now[data-beat="b"]::after {
+    animation: sb-blink-b 300ms steps(1);
+  }
+}
+
+/* ---------- 14. container queries ---------- */
+/* The frame is always 16:9, so width queries stand in for height ones.
+   760px: phones in landscape and 200% zoom, where the type sits on its 12px floor. */
+@container (max-width: 760px) {
+  .gm-bottom.gm-raised.title-side {
+    top: 29%;
+    bottom: 2%;
+    padding-left: 2%;
+  }
+
+  .title-side .title-panel {
+    width: 24em;
+    padding: 0.6em 0.8em;
+    gap: 0.45em;
+  }
+
+  .title-lede,
+  .play-guitar small,
+  .play-keys small,
+  .title-label,
+  .jm-era {
+    display: none;
+  }
+
+  .title-buttons .primary {
+    font-size: 1.15em;
+  }
+
+  .journey-map {
+    gap: 0.5em;
+  }
+
+  .jm-levels {
+    gap: 0.25em;
+  }
+
+  .jm-level.gm-btn {
+    width: 2.35em;
+    height: 1.9em;
+  }
+
+  .jm-level .icon {
+    top: -0.45em;
+    right: -0.4em;
+    width: 0.95em;
+    height: 0.95em;
+  }
+}
+
+/* Compact frames: the lute's card keeps its headline, tip and button; the notebook goes one column. */
+@container (max-width: 760px) {
+  .lute-slot {
+    width: 58%;
+    max-height: 44%;
+  }
+
+  .lute-icon,
+  .lute-kicker,
+  .lute-src {
+    display: none;
+  }
+
+  .lute-card {
+    grid-template-columns: 1fr;
+    padding: 0.45em 0.7em 0.5em;
+  }
+
+  .lute-foot {
+    grid-column: 1;
+  }
+
+  .ln-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .ln-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Compact frames: the NOW card shrinks and keeps only the chord box; the HUD plates widen. */
+@container (max-width: 760px) {
+  .hud-tl {
+    width: 30%;
+  }
+
+  .hud-top {
+    width: 44%;
+  }
+
+  .fb-now {
+    width: 5.6em;
+  }
+
+  /* At this width the string names would be under 9px: the box keeps its dots and finger digits. */
+  .ch-card.next,
+  .ch-legend,
+  .fb-now .fb-name {
+    display: none;
+  }
+
+  /* About a fifth of the frame, so incoming foes stay in view (never narrower than three chips). */
+  .hud-ear {
+    max-width: max(22%, 10.2em);
+  }
+
+  /* The three newest chips, and the result line without its chord (the newest chip shows it). */
+  .ear-row > .ear-chip:nth-last-child(n + 4),
+  .ear-cap-what {
+    display: none;
+  }
+
+  .ear-chip {
+    flex-basis: 2.7em;
+  }
+
+  .ear-chip b {
+    font-size: 1.25em;
+  }
+
+  .tune-slot {
+    top: 19%;
+  }
+
+  .tune-panel {
+    max-width: 96%;
+    grid-template-columns: auto 15em;
+    gap: 0.4em 0.9em;
+    padding: 0.55em 0.75em;
+  }
+
+  .tune-note {
+    min-width: 1.2em;
+    font-size: 2em;
+  }
+
+  .tune-meter {
+    width: 11em;
+  }
+
+  .tune-cap,
+  .tune-right .sound-choice small {
+    display: none;
+  }
+
+  .tune-string {
+    width: 1.8em;
+    height: 1.8em;
+  }
+
+  .tune-right .sound-choice .seg > button {
+    white-space: normal;
+    padding: 0.3em 0.45em;
+  }
+}
+
+/* ---------- 15. dev pages (outside the game) ---------- */
+/* /preview: the file input stays focusable (visually hidden instead of display: none); its label shows the focus. */
+.file-pick input {
+  display: block;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.file-pick:focus-within span {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }

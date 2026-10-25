@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "node scripts/copy-alphatab.mjs"
+    "postinstall": "node scripts/copy-alphatab.mjs",
+    "bake-art": "node scripts/bake-art.mjs",
+    "bake-art:check": "node scripts/bake-art.mjs --check"
   },
   "dependencies": {
     "@coderline/alphatab": "^1.8.4",

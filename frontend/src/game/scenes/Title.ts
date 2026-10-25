@@ -30,11 +30,21 @@ export class Title extends Phaser.Scene {
     const glass = this.add.image(1045, GROUND_Y - 70, "hourglass").setDepth(11).setScale(0.45);
     this.tweens.add({ targets: [wolf, glass], y: "-=14", duration: 380, yoyo: true, repeat: -1, ease: "Sine.Out" });
     this.add
-      .text(640, 112, "The Traveling Bard", { fontFamily: FONT, fontSize: "72px", fontStyle: "bold", color: "#ffe9a8", stroke: "#2b1a12", strokeThickness: 12 })
+      .text(640, 112, "The Traveling Bard", { fontFamily: FONT, fontSize: "72px", fontStyle: "900", color: "#ffe9a8", stroke: "#2b1a12", strokeThickness: 12 })
       .setOrigin(0.5)
       .setDepth(20);
+    // A thin outline plus a drop shadow, and three-per-em spaces (U+2004): the outline can't swallow the
+    // word gaps, and the line stays no wider than the logo.
     this.add
-      .text(640, 186, "a time-traveling fairy tale you play with a real guitar", { fontFamily: FONT, fontSize: "26px", fontStyle: "italic", color: "#fff6dc", stroke: "#2b1a12", strokeThickness: 6 })
+      .text(640, 186, "a time-traveling fairy tale you play with a real guitar".replace(/ /g, "\u2004"), {
+        fontFamily: FONT,
+        fontSize: "26px",
+        fontStyle: "italic 700",
+        color: "#fff6dc",
+        stroke: "#2b1a12",
+        strokeThickness: 3.5,
+      })
+      .setShadow(0, 3, "#2b1a12", 2, true, true)
       .setOrigin(0.5)
       .setDepth(20);
     this.time.addEvent({ delay: 400, loop: true, callback: () => burst(this, 1150 + Phaser.Math.Between(-80, 80), GROUND_Y - 175 + Phaser.Math.Between(-120, 120), { tint: [0xb784ff, 0x7ff3ff, 0xffffff], count: 2, speed: 80, gravityY: -60, scale: 0.6 }) });

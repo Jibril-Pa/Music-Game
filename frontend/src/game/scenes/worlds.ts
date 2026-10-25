@@ -134,7 +134,7 @@ export function scrollingBackdrop(scene: Phaser.Scene, world: WorldId, night: bo
   const layers: { ts: Phaser.GameObjects.TileSprite; f: number }[] = [];
   const list = night && t.nightLayers ? t.nightLayers : t.layers;
   list.forEach((l, i) => {
-    const ts = scene.add.tileSprite(0, l.y, 1280, scene.textures.get(l.key).getSourceImage().height, l.key).setOrigin(0, 0).setScrollFactor(0).setDepth(-90 + i * 5);
+    const ts = scene.add.tileSprite(0, l.y, 1280, scene.textures.getFrame(l.key).height, l.key).setOrigin(0, 0).setScrollFactor(0).setDepth(-90 + i * 5);
     if (night && !t.nightLayers) ts.setTint(t.nightTint);
     layers.push({ ts, f: l.f });
   });
